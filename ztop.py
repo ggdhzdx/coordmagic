@@ -55,7 +55,7 @@ parser.add_argument("-f",dest='fragment',metavar='fragment',action='append',defa
                          'site= define cutting site of the residue. D1 and D2 are site label,\n'
                          'The second to last character of site label are used for site match\n'
                          'following the shortest match rule: e.g. D12 will match A1 or A12 but not A13\n'
-                         'X542 will match Y5,Y54,Y542,Y5421 but not X6, X55, X543\n'gi
+                         'X542 will match Y5,Y54,Y542,Y5421 but not X6, X55, X543\n'
                          'D1:2-3 define site by breaking the bond 2-3 where atom 2 belongs to the residue.')
 parser.add_argument("-b",dest='build',metavar='build',default='',type=str,
                     help = 'set a list of res label seperated to build the molecule. \n'

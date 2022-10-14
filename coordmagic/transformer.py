@@ -11,6 +11,7 @@ from .measurement import torsion
 
 
 __all__ = [
+    'align_st_axis',
     'shift_st_abc',
     'shift_st_xyz',
     'rotate_st_by',
@@ -40,6 +41,42 @@ def shift_st_xyz(struct, xyz, pbc=False):
             s.wrap_in_fcoord()
             s.frac2cart()
     return s
+def align_st_axis(struct, axis_type='inertia',alignment="zyx"):
+    ''' align the inertia axis of structure to cartesian axis, and translate mass/geom center to origin
+    the axis_type determine geom axis/inertia axis
+    the default alignment option zyx means align axis with the largest value (moment of inertia or
+    space extension) to z and aixs with medium value to y
+    it will return a list of four set of coordinate
+    the first is to align of positive direction of first two axis
+    followed by pn, np, and nn
+    '''
+    xyz2vec = {'x':np.array([1,0,0]),'y':np.array([0,1,0]),'z':np.array([0,0,1])}
+    if axis_type == 'inertia':
+        coord = np.array(struct.coord) - struct.mass_center
+        pia = struct.principal_inertia_axis
+    elif axis_type == 'geom':
+        coord = np.array(struct.coord) - struct.geom_center
+        pia = struct.principal_geom_axis
+    else:
+        print('Error! unkown axis_type {:s}, use either geom or inertia'.format(axis_type))
+    vec1 = xyz2vec[alignment[0]]
+    mp = rotate_to_align(pia[0],vec1)[:3,:3]
+    mn = rotate_to_align(pia[0],vec1*-1)[:3,:3]
+    vec2 = xyz2vec[alignment[1]]
+    mpp = rotate_to_align(pia[1]@mp,vec2)[:3,:3]
+    mpn = rotate_to_align(pia[1]@mp,vec2*-1)[:3,:3]
+    mnp = rotate_to_align(pia[1]@mn,vec2)[:3,:3]
+    mnn = rotate_to_align(pia[1]@mn,vec2*-1)[:3,:3]
+    coord_mpp = coord@mp@mpp
+    coord_mpn = coord@mp@mpn
+    coord_mnp = coord@mn@mnp
+    coord_mnn = coord@mn@mnn
+    return [coord_mpp,coord_mpn,coord_mnp,coord_mnn]
+
+# def shift_st_xyz(struct, xyz, pbc=False):
+
+# def shift_st_xyz(struct, xyz, pbc=False):
+#     '''xyz is a list of three numbers. Means shift of cart coords in x y z'''
 
 def rotate_st_by(struct, abc, center='g'):
     '''abc is a list of three numbers in degrees.
@@ -96,6 +133,7 @@ def rotate_to_align(A,B,C=[0,0,0,1]):
     0  0  0  0
     0  0  0  1
     so that A@M = A'  where cross(A',B)=0
+    https://math.stackexchange.com/questions/180418/calculate-rotation-matrix-to-align-vector-a-to-vector-b-in-3d
     '''
     if len(A) == 3:
         A=np.append(A,1)
@@ -109,15 +147,22 @@ def rotate_to_align(A,B,C=[0,0,0,1]):
     m1 = translate_to_align([0,0,0,1],C)
     A=np.array(A[:3])/np.linalg.norm(A[:3])
     B=np.array(B[:3])/np.linalg.norm(B[:3])
-    axis = np.cross(A,B)
-    ax,ay,az=axis
-    cosA = np.dot(A,B)
-    k = 1.0 / (1.0+cosA+0.000001)
-    m3 = np.array([[ax*ax*k+cosA,ay*ax*k-az,az*ax*k+ay],
-                  [ax*ay*k+az,ay*ay*k+cosA,az*ay*k-ax],
-                  [ax*az*k-ay,ay*az*k+ax,az*az*k+cosA]]).T
-    m4 = np.eye(4)
-    m4[:-1,:-1] = m3
+    if np.linalg.norm(A + B) < 0.01:
+        if A[0] > A[2]:
+            D = np.array([A[1],A[0]*-1,0])
+        elif A[0] < A[2]:
+            D = np.array([0,A[2]*-1,A[1]])
+        m4 = rotate_cw_around([0,0,0],D,angle=180)
+    else:
+        axis = np.cross(A,B)
+        ax,ay,az=axis
+        cosA = np.dot(A,B)
+        k = 1.0 / (1.0+cosA+0.000001)
+        m3 = np.array([[ax*ax*k+cosA,ay*ax*k-az,az*ax*k+ay],
+                      [ax*ay*k+az,ay*ay*k+cosA,az*ay*k-ax],
+                      [ax*az*k-ay,ay*az*k+ax,az*az*k+cosA]]).T
+        m4 = np.eye(4)
+        m4[:-1,:-1] = m3
     return m0@m4@m1
 
 

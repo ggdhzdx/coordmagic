@@ -177,7 +177,6 @@ class Structure:
             nx.set_node_attributes(self.graph,mapping,'sn')
             nx.relabel_nodes(self.graph,mapping)
 
-
     def elem2an(self):
         atomnum = [self.P.elem2an[i[0].upper()+i[1:].lower()] for i in self.elem]
         self.setter('atomnum', atomnum)
@@ -361,14 +360,46 @@ class Structure:
 
     @property
     def geom_center(self):
-        x = np.mean(np.array(self.coord).T[0])
-        y = np.mean(np.array(self.coord).T[1])
-        z = np.mean(np.array(self.coord).T[2])
-        return [x, y, z]
+        return np.average(np.array(self.coord),axis=0)
 
     @property
     def mass_center(self):
-        pass
+        weights = np.array([self.P.elem2mass[x] for x in self.elem])
+        center_of_mass = np.average(np.array(self.coord), axis=0, weights=weights)
+        return center_of_mass
+
+    @property
+    def inertia_tensor(self):
+        coord = np.array(self.coord) - self.mass_center
+        Ixx,Iyy,Izz,Ixy,Ixz,Iyz = [0,0,0,0,0,0]
+        for i,c in enumerate(coord):
+            m = self.P.elem2mass[self.elem[i]]
+            x,y,z = c
+            Ixx += m * (y**2 + z**2)
+            Iyy += m * (x**2 + z**2)
+            Izz += m * (x**2 + y**2)
+            Ixy += -1 * m * x * y
+            Ixz += -1 * m * x * z
+            Iyz += -1 * m * y * z
+        return np.array([[Ixx, Ixy, Ixz], [Ixy, Iyy, Iyz], [Ixz, Iyz, Izz]])
+    @property
+    def principal_inertia_axis(self):
+        '''retrun  array of principle inertia axis
+        ranged from large eigen_val (moment of inertia) to small eigen_val'''
+        eigval, eigvec = np.linalg.eig(self.inertia_tensor)
+        sort = np.argsort(eigval)[::-1]
+        eigvec = eigvec[:,sort].T
+        # right hand convention
+        if np.dot(np.cross(eigvec[0], eigvec[1]), eigvec[2]) < 0:
+            eigvec *= -1
+        return eigvec
+    @property
+    def principal_geom_axis(self):
+        '''retrun array of geometry axis from svd on coords
+        ranged from long axis to short axis'''
+        coord = np.array(self.coord) - self.geom_center
+        u,s,vh  = np.linalg.svd(coord)
+        return vh
 
     @property
     def button(self):

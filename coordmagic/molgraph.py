@@ -205,12 +205,17 @@ class MolGraph:
             type_id = idx+1
             for m in [m for id,m in self.S.molecules.items() if id in row['id']]:
                 m['type_id'] = type_id
+        mol_str = []
         for idx,row in mol_df_c.iterrows():
             if row['fingerprint']==1:
-                print('Type {:d}: {:s} X {:d} found'.format(idx+1,row['formula'],row['id']))
+                print('Type {:d}: {:s} X {:d}'.format(idx+1,row['formula'],row['id']))
+                mol_str.append('Type {:d}: {:s} X {:d}'.format(idx+1,row['formula'],row['id']))
             else:
-                print('Type {:d}: {:s} X {:d} found, but their atom orders are different ({:d} kinds)'
+                print('Type {:d}: {:s} X {:d}, but their atom orders are different ({:d} kinds)'
                       .format(idx+1,row['formula'],row['id'],row['fingerprint']))
+                mol_str.append('Type {:d}: {:s} X {:d} (diff. order)'
+                      .format(idx+1,row['formula'],row['id'],row['fingerprint']))
+        self.S.mol_str = mol_str
 
     def gen_internal_coords(self, measure=False):
         '''generate bond angle dihedral for each molecule in self.S.molecules

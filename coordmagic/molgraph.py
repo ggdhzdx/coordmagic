@@ -34,6 +34,15 @@ def n2formula(graph, n):
     formula = ''.join([i[0] + str(i[1]) for i in hillsys])
     return formula
 
+def n2weight(graph,n):
+    '''convet node label to mol weight
+    n is a list of node labels
+    '''
+    elems = list(nx.get_node_attributes(graph.subgraph(n), 'elem').values())
+    param = Parameter()
+    mol_weight = sum([param.elem2an[i] for i in elems])
+    return mol_weight
+
 
 class MolGraph:
     '''generate graph of the structure'''
@@ -180,7 +189,7 @@ class MolGraph:
                 # G.edges[e]['len'] = bond_len
                 # G.edges[e]['ele'] = (e1,e2)
 
-    def identify_unique_molecule(self):
+    def identify_unique_molecule(self, silent=False):
         '''identify unique molecules in self.S.molecules'''
         # to deal with same molecule with different atom order
         ids = []
@@ -208,14 +217,14 @@ class MolGraph:
         mol_str = []
         for idx,row in mol_df_c.iterrows():
             if row['fingerprint']==1:
-                print('Type {:d}: {:s} X {:d}'.format(idx+1,row['formula'],row['id']))
                 mol_str.append('Type {:d}: {:s} X {:d}'.format(idx+1,row['formula'],row['id']))
             else:
-                print('Type {:d}: {:s} X {:d}, but their atom orders are different ({:d} kinds)'
-                      .format(idx+1,row['formula'],row['id'],row['fingerprint']))
                 mol_str.append('Type {:d}: {:s} X {:d} (diff. order)'
                       .format(idx+1,row['formula'],row['id'],row['fingerprint']))
         self.S.mol_str = mol_str
+        self.S.mol_df = mol_df
+        if not silent:
+            print("\n".join(mol_str))
 
     def gen_internal_coords(self, measure=False):
         '''generate bond angle dihedral for each molecule in self.S.molecules
@@ -297,7 +306,7 @@ class MolGraph:
             else:
                 v['bond_order'] = 1
 
-    def gen_mol(self):
+    def gen_mol(self, silent=False):
         '''generate molecules properties for self.S
         besed on graph and connected_components
         which is a dict of default dict, keys are molid and
@@ -311,13 +320,15 @@ class MolGraph:
         sn2molid = {}  #dict map atom serial number to molid
         sn2formula = {} #dict map atom serial number to molid
         molecules = []
-        for i,c in enumerate(nx.connected_components(G)):
+        for i,c in enumerate(sorted(nx.connected_components(G),key=lambda x:len(x),reverse=True)):
             c=sorted(c)
             mol = defaultdict(str)
             molid=i+1
             sn2molid.update({sn:{'molid':molid} for sn in c})
             formula = n2formula(G,c)
+            weight = n2weight(G,c)
             sn2formula.update({sn:{'formula':formula} for sn in c})
+            sn2formula.update({sn:{'mol_weight':weight} for sn in c})
             mol['id'] = molid
             mol['sn'] = c
             mol['formula'] = formula
@@ -335,7 +346,7 @@ class MolGraph:
         mol_list = pd.DataFrame(molecules)[['id','formula']].set_index('id')
         self.S.mol_list = mol_list
         self.S.molecules = mol2id
-        self.identify_unique_molecule()
+        self.identify_unique_molecule(silent=silent)
         # update atoms after atom properties of "molid" and "formula" has been added to the graph
         self.S.atoms = [defaultdict(str, v) for i, v in G.nodes.data()]
         self.gen_supergraph()

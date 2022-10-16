@@ -50,6 +50,20 @@ class ResidueComposer:
                     d.atom3.idx == idx[0] and d.atom2.idx == idx[1]):
                 dihedrals.append(d)
         return dihedrals
+    def _get_rb_torsions(self,ps, idx):
+        rb_torsions = []
+        for d in ps.rb_torsions:
+            if (d.atom1.idx == idx[0] and d.atom2.idx == idx[1]) or (
+                    d.atom3.idx == idx[1] and d.atom4.idx == idx[0]):
+                rb_torsions.append(d)
+        return rb_torsions
+    def _get_inter_rb_torsions(self,ps,idx):
+        rb_torsions = []
+        for d in ps.rb_torsions:
+            if (d.atom2.idx == idx[0] and d.atom3.idx == idx[1]) or (
+                    d.atom3.idx == idx[0] and d.atom2.idx == idx[1]):
+                rb_torsions.append(d)
+        return rb_torsions
 
     def parse_residue(self,res_str):
         '''input a res string and add label,res_object pair to res lib'''
@@ -180,11 +194,15 @@ class ResidueComposer:
             angles = self._get_angles(parmed_struct, [oa, ia])
             dihedrals = self._get_dihedrals(parmed_struct, [oa, ia])
             inter_dihedrals = self._get_inter_dihedrals(parmed_struct,[oa,ia])
+            rb_torsions = self._get_rb_torsions(parmed_struct, [oa, ia])
+            inter_rb_torsions = self._get_inter_rb_torsions(parmed_struct,[oa,ia])
             res['sites'][k]['atoms'] = atoms
             res['sites'][k]['bond'] = bond
             res['sites'][k]['angles'] = angles
             res['sites'][k]['dihedrals'] = dihedrals
             res['sites'][k]['inter_dihedrals'] = inter_dihedrals
+            res['sites'][k]['rb_torsions'] = rb_torsions
+            res['sites'][k]['inter_rb_torsions'] = inter_rb_torsions
         res['cm_frag'] = cm_frag
         res['pmd_struct'] = parmed_struct
         return res
@@ -255,6 +273,26 @@ class ResidueComposer:
                     dihedral = pmd.Dihedral(*atoms, improper=d.improper, ignore_end=d.ignore_end, type=dtype)
                     ps.dihedrals.append(dihedral)
             ps.dihedral_types.claim()
+        def set_rb_torsion(ps, rb_torsions, mapping):
+            '''set dihedrals with three atom in one frag and one atom in another frag'''
+            for d in rb_torsions:
+                dtype = copy.deepcopy(d.type)
+                ps.rb_torsion_types.append(dtype)
+                idx = [d.atom1.idx, d.atom2.idx, d.atom3.idx, d.atom4.idx]
+                idx = [mapping[i + 1] - 1 for i in idx]
+                dihedral_set = 0
+                for cd in ps.dihedrals:
+                    sn = tuple([cd.atom1.idx, cd.atom2.idx, cd.atom3.idx, cd.atom4.idx])
+                    if sn == tuple(idx) or sn == tuple(idx[::-1]):
+                        cd.type = dtype
+                        dihedral_set = 1
+                if dihedral_set == 0:
+                    # print('Dihedral {:s} not found in pmd structure, add new dihedrals'
+                    #       .format('-'.join([str(i+1) for i in idx])))
+                    atoms = [ps.atoms[i] for i in idx]
+                    rb_torsion = pmd.Dihedral(*atoms, improper=d.improper, ignore_end=d.ignore_end, type=dtype)
+                    ps.rb_torsions.append(rb_torsion)
+            ps.rb_torsion_types.claim()
         # def combine_dihedral(da, db, dihed_idx):
         #     '''combine two dihedrals type and return a dihedrals dict'''
         #     # first generate two dict with period as keys and dihed type as value
@@ -414,9 +452,14 @@ class ResidueComposer:
             set_angle(parmed_Cfrag,B['sites'][sb]['angles'],mapB)
             set_dihedral(parmed_Cfrag,A['sites'][sa]['dihedrals'],mapA)
             set_dihedral(parmed_Cfrag,B['sites'][sb]['dihedrals'],mapB)
+            set_rb_torsion(parmed_Cfrag,A['sites'][sa]['rb_torsions'],mapA)
+            set_rb_torsion(parmed_Cfrag,B['sites'][sb]['rb_torsions'],mapB)
             interdA = A['sites'][sa]['inter_dihedrals']
             interdB = B['sites'][sb]['inter_dihedrals']
+            interdA_rb = A['sites'][sa]['inter_rb_torsions']
+            interdB_rb = B['sites'][sb]['inter_rb_torsions']
             set_dihedral(parmed_Cfrag,interdA,mapA)
+            set_rb_torsion(parmed_Cfrag,interdA_rb,mapA)
 
             # for d in interdA:
             #     print(d)
@@ -439,11 +482,15 @@ class ResidueComposer:
             angles = self._get_angles(parmed_Cfrag, [oa, ia])
             dihedrals = self._get_dihedrals(parmed_Cfrag, [oa, ia])
             inter_dihedrals = self._get_inter_dihedrals(parmed_Cfrag, [oa, ia])
+            rb_torsions = self._get_rb_torsions(parmed_Cfrag, [oa, ia])
+            inter_rb_torsions = self._get_inter_rb_torsions(parmed_Cfrag,[oa,ia])
             res['sites'][k]['atoms'] = atoms
             res['sites'][k]['bond'] = bond
             res['sites'][k]['angles'] = angles
             res['sites'][k]['dihedrals'] = dihedrals
             res['sites'][k]['inter_dihedrals'] = inter_dihedrals
+            res['sites'][k]['rb_torsions'] = rb_torsions
+            res['sites'][k]['inter_rb_torsions'] = inter_rb_torsions
         res['cm_frag'] = cm_Cfrag[0]
         res['pmd_struct'] = parmed_Cfrag
         return res

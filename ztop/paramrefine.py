@@ -38,6 +38,7 @@ class ParamRefine:
         else:
             pmd_struct = pmd.load_file(top_file)
         self.convert2struct(pmd_struct)
+        # print(self.ps.rb_torsions[0].type)
         # self.ps = pmd_struct
         # self.ps = pmd.gromacs.GromacsTopologyFile.from_structure(pmd_struct)
         self.top_bug_fix()
@@ -60,6 +61,8 @@ class ParamRefine:
         self.ps.bonds = st.bonds
         self.ps.angles = st.angles
         self.ps.dihedrals = st.dihedrals
+        self.ps.rb_torsions = st.rb_torsions
+        self.ps.rb_torsion_types = st.rb_torsion_types
         self.ps.bond_types = st.bond_types
         self.ps.angle_types = st.angle_types
         self.ps.dihedral_types = st.dihedral_types

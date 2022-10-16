@@ -313,6 +313,7 @@ class Structure:
             atoms = [self._sn2atom[i] for i in sn]
         return atoms
 
+
     def write_structure(self, basename=None, append=False, ext='', options=''):
         sw = StructureWriter()
         sw.st = self

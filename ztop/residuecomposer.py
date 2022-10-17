@@ -24,6 +24,27 @@ class ResidueComposer:
         for b in ps.bonds:
             if b.atom1.idx in idx and b.atom2.idx in idx:
                 return b
+    def _get_adjusts(self, ps, idx):
+        atoms14 = []
+        adjusts = []
+        for d in ps.dihedrals:
+            if (d.atom1.idx == idx[0] and d.atom2.idx == idx[1]) or (
+                d.atom3.idx == idx[1] and d.atom4.idx == idx[0]) or (
+                d.atom2.idx == idx[0] and d.atom3.idx == idx[1]) or (
+                d.atom3.idx == idx[0] and d.atom2.idx == idx[1]):
+                if not d.improper:
+                    atoms14.append(frozenset((d.atom1.idx,d.atom4.idx)))
+        for d in ps.rb_torsions:
+            if (d.atom1.idx == idx[0] and d.atom2.idx == idx[1]) or (
+                    d.atom3.idx == idx[1] and d.atom4.idx == idx[0]) or (
+                    d.atom2.idx == idx[0] and d.atom3.idx == idx[1]) or (
+                    d.atom3.idx == idx[0] and d.atom2.idx == idx[1]):
+                if not d.improper:
+                    atoms14.append(frozenset((d.atom1.idx,d.atom4.idx)))
+        for ad in ps.adjusts:
+            if frozenset((ad.atom1.idx,ad.atom2.idx)) in atoms14:
+                adjusts.append(ad)
+        return adjusts
     def _get_atoms(self,ps, idx):
         atoms = []
         for i in idx:
@@ -191,6 +212,7 @@ class ResidueComposer:
             ia, oa = atoms
             atoms = self._get_atoms(parmed_struct, [ia,oa])
             bond = self._get_bond(parmed_struct, [oa,ia])
+            adjusts = self._get_adjusts(parmed_struct, [oa, ia])
             angles = self._get_angles(parmed_struct, [oa, ia])
             dihedrals = self._get_dihedrals(parmed_struct, [oa, ia])
             inter_dihedrals = self._get_inter_dihedrals(parmed_struct,[oa,ia])
@@ -203,6 +225,9 @@ class ResidueComposer:
             res['sites'][k]['inter_dihedrals'] = inter_dihedrals
             res['sites'][k]['rb_torsions'] = rb_torsions
             res['sites'][k]['inter_rb_torsions'] = inter_rb_torsions
+            res['sites'][k]['rb_torsions'] = rb_torsions
+            res['sites'][k]['inter_rb_torsions'] = inter_rb_torsions
+            res['sites'][k]['adjusts'] = adjusts
         res['cm_frag'] = cm_frag
         res['pmd_struct'] = parmed_struct
         return res
@@ -273,6 +298,37 @@ class ResidueComposer:
                     dihedral = pmd.Dihedral(*atoms, improper=d.improper, ignore_end=d.ignore_end, type=dtype)
                     ps.dihedrals.append(dihedral)
             ps.dihedral_types.claim()
+
+        def set_adjust(ps, adjusts, mapping):
+            '''set dihedrals with three atom in one frag and one atom in another frag'''
+            for a in adjusts:
+                atype = copy.deepcopy(a.type)
+                ps.adjust_types.append(atype)
+                idx = [a.atom1.idx, a.atom2.idx]
+                idx = [mapping[i + 1] - 1 for i in idx]
+                adjust_set = 0
+                for ad in ps.adjusts:
+                    sn = frozenset([ad.atom1.idx, ad.atom2.idx])
+                    if sn == frozenset(idx):
+                        ad.type = atype
+                        adjust_set = 1
+                if adjust_set == 0:
+                    # print('Dihedral {:s} not found in pmd structure, add new dihedrals'
+                    #       .format('-'.join([str(i+1) for i in idx])))
+                    atoms = [ps.atoms[i] for i in idx]
+                    adjust = pmd.NonbondedException(*atoms, type=atype)
+                    ps.adjusts.append(adjust)
+            ps.adjust_types.claim()
+
+        def set_rb_torsion(ps, rb_torsions, mapping):
+            '''set dihedrals with three atom in one frag and one atom in another frag'''
+            for d in rb_torsions:
+                dtype = copy.deepcopy(d.type)
+                ps.rb_torsion_types.append(dtype)
+                idx = [d.atom1.idx, d.atom2.idx, d.atom3.idx, d.atom4.idx]
+                idx = [mapping[i + 1] - 1 for i in idx]
+                dihedral_set = 0
+
         def set_rb_torsion(ps, rb_torsions, mapping):
             '''set dihedrals with three atom in one frag and one atom in another frag'''
             for d in rb_torsions:
@@ -450,6 +506,8 @@ class ResidueComposer:
             set_bond(parmed_Cfrag,bondA,mapA,bondB)
             set_angle(parmed_Cfrag,A['sites'][sa]['angles'],mapA)
             set_angle(parmed_Cfrag,B['sites'][sb]['angles'],mapB)
+            set_adjust(parmed_Cfrag,A['sites'][sa]['adjusts'],mapA)
+            set_adjust(parmed_Cfrag,B['sites'][sb]['adjusts'],mapB)
             set_dihedral(parmed_Cfrag,A['sites'][sa]['dihedrals'],mapA)
             set_dihedral(parmed_Cfrag,B['sites'][sb]['dihedrals'],mapB)
             set_rb_torsion(parmed_Cfrag,A['sites'][sa]['rb_torsions'],mapA)
@@ -480,6 +538,7 @@ class ResidueComposer:
             atoms = self._get_atoms(parmed_Cfrag, [ia, oa])
             bond = self._get_bond(parmed_Cfrag, [oa, ia])
             angles = self._get_angles(parmed_Cfrag, [oa, ia])
+            adjusts = self._get_adjusts(parmed_Cfrag, [oa, ia])
             dihedrals = self._get_dihedrals(parmed_Cfrag, [oa, ia])
             inter_dihedrals = self._get_inter_dihedrals(parmed_Cfrag, [oa, ia])
             rb_torsions = self._get_rb_torsions(parmed_Cfrag, [oa, ia])
@@ -491,6 +550,7 @@ class ResidueComposer:
             res['sites'][k]['inter_dihedrals'] = inter_dihedrals
             res['sites'][k]['rb_torsions'] = rb_torsions
             res['sites'][k]['inter_rb_torsions'] = inter_rb_torsions
+            res['sites'][k]['adjusts'] = adjusts
         res['cm_frag'] = cm_Cfrag[0]
         res['pmd_struct'] = parmed_Cfrag
         return res
@@ -531,6 +591,10 @@ class ResidueComposer:
                   .format(','.join(base_frag['sites'].keys()),compose_str))
         else:
             print('{:s} build susscessful'.format(compose_str))
+            # base_frag['pmd_struct'].dihedrals += base_frag['pmd_struct'].rb_torsions
+            # base_frag['pmd_struct'].dihedrals.claim()
+            # base_frag['pmd_struct'].rb_torsions = []
+
         return base_frag
 
     def compose_system(self,compose_str):

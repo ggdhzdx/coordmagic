@@ -38,7 +38,7 @@ class ParamRefine:
         else:
             pmd_struct = pmd.load_file(top_file)
         self.convert2struct(pmd_struct)
-        # print(self.ps.rb_torsions[0].type)
+        # print(self.ps.rb_torsions[0].ignore_end)
         # self.ps = pmd_struct
         # self.ps = pmd.gromacs.GromacsTopologyFile.from_structure(pmd_struct)
         self.top_bug_fix()
@@ -67,6 +67,8 @@ class ParamRefine:
         self.ps.angle_types = st.angle_types
         self.ps.dihedral_types = st.dihedral_types
         self.ps.combining_rule = st.combining_rule
+        self.ps.adjusts = st.adjusts
+        self.ps.adjust_types = st.adjust_types
 
     def refine_charge(self,charge_file):
         chg_list = []

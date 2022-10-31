@@ -16,19 +16,27 @@ from collections import defaultdict
 
 class Structure:
 
-
-    def __init__(self):
+    def __init__(self, elem=[],atomnum=[],coord=[],fcoord=[],cell_vect=[],cell_param=[]):
         self.basename = ''
         self.atoms = []  # list of atom, each atom is a defaultdict object
         self.period_flag = 0  # weather periodic structure
-        self.cell_vect = []
-        self.cell_param = []
-        # flollowing are properties extract from self.atoms in complete_self method
-        self.coord = []
-        self.fcoord = []
-        self.elem = []
-        self.atomnum = []
+        self.cell_vect = cell_vect
+        self.cell_param = cell_param
+        # following are properties extract from self.atoms in complete_self method
+        self.coord = coord
+        self.fcoord = fcoord
+        self.elem = elem
+        self.atomnum = atomnum
         self.sn = []  # serial number of atoms. Duplicates indicate image atoms
+        if len(self.atoms) == 0:
+            if len(self.elem) > 0:
+                self.atoms = [defaultdict(str,{'elem':i}) for i in self.elem]
+            elif len(self.atomnum) > 0:
+                self.atoms = [defaultdict(str,{'atomnum':int(i)}) for i in self.atomnum]
+        if len(self.coord) > 0:
+            self.setter('coord',self.coord)
+        if len(self.fcoord) > 0:
+            self.setter('fcoord',self.fcoord)
         self.cell_origin = [0, 0, 0]
         # frames is a defaultdict will contain multiple atom lists
         self.frames = defaultdict(list,{1:self.atoms})
@@ -104,7 +112,7 @@ class Structure:
             return (self.formula +
             " in a={:.1f},b={:.1f},c={:.1f},alpha={:.1f},beta={:.1f},gamma={:.1f}".format(*self.cell_param))
         else:
-            return (self.formula + 'in vacuum')
+            return (self.formula + ' in vacuum')
 
     def complete_self(self, wrap=False, reset_vect=True):
         '''re-Generate coords fcoords elems atomnums sn attribute from self.atoms
@@ -169,6 +177,7 @@ class Structure:
                     self.frac2cart()
 
     def reset_sn(self):
+        '''reset sn key in defaultdict by the order of atom in self.atoms list'''
         new_sn = list(range(1, len(self.atoms)+1))
         old_sn = self.getter('sn')
         self.setter('sn', new_sn)

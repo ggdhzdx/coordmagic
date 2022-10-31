@@ -14,6 +14,7 @@ from . import structure
 from .parameter import Parameter
 from .measurement import angle as measure_angle
 from .measurement import torsion as measure_dihedral
+from .reorderatom import snl2r
 #from .structurewriter import  write_structure
 
 __all__ = [
@@ -189,6 +190,7 @@ class MolGraph:
                 # G.edges[e]['len'] = bond_len
                 # G.edges[e]['ele'] = (e1,e2)
 
+
     def identify_unique_molecule(self, silent=False):
         '''identify unique molecules in self.S.molecules'''
         # to deal with same molecule with different atom order
@@ -196,16 +198,9 @@ class MolGraph:
         formulas = []
         hashs = []
         fingerprints = []
-        for id,mol in self.S.molecules.items():
-            #fingerprint is a string of element and degree of nodes
-            #used to identify
-            ids.append(mol['id'])
-            formulas.append(mol['formula'])
-            hashs.append(mol['hash'])
-            fingerprints.append(mol['elem']+mol['degree'])
-        mol_df = pd.DataFrame.from_dict({'id':ids,'formula':formulas,'hash':hashs,'fingerprint':fingerprints})
-        # print(mol_df.loc[1,'fingerprint'])
-        # print(mol_df)
+        mol_df = pd.DataFrame.from_dict(self.S.molecules, orient='index')
+        mol_df['fingerprint'] = mol_df['elem'] + mol_df['degree']
+
         mol_df_c = mol_df.groupby(['formula','hash'])\
                     .agg({'id':'count',
                           'fingerprint':lambda x:len(set(x))}).reset_index()
@@ -214,6 +209,7 @@ class MolGraph:
             type_id = idx+1
             for m in [m for id,m in self.S.molecules.items() if id in row['id']]:
                 m['type_id'] = type_id
+        mol_df = pd.DataFrame.from_dict(self.S.molecules, orient='index')
         mol_str = []
         for idx,row in mol_df_c.iterrows():
             if row['fingerprint']==1:
@@ -331,6 +327,7 @@ class MolGraph:
             sn2formula.update({sn:{'mol_weight':weight} for sn in c})
             mol['id'] = molid
             mol['sn'] = c
+            mol['sn_range'] = snl2r(c)
             mol['formula'] = formula
             mol['graph'] = G.subgraph(c)  # !!!the node order is changed,  graph, edge and node attributes are shared with the original graph.
             mol['hash'] = graph_hashing.weisfeiler_lehman_graph_hash(mol['graph'],node_attr='elem')

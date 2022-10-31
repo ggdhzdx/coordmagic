@@ -60,6 +60,7 @@ class StructureReader:
                           '.gro': self._read_gro,
                           '.log': self._read_gau_log,
                           '.fchk': self._read_gau_fchk,
+                          '.fch': self._read_gau_fchk,
                           '.gjf':self._read_gau_inp,
                           '.xyz':self._read_xyz,
                           'parmed': self._conver_parmed,

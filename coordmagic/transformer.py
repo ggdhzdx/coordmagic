@@ -148,7 +148,7 @@ def rotate_to_align(A,B,C=[0,0,0,1]):
     A=np.array(A[:3])/np.linalg.norm(A[:3])
     B=np.array(B[:3])/np.linalg.norm(B[:3])
     if np.linalg.norm(A + B) < 0.01:
-        if A[0] > A[2]:
+        if A[0] >= A[2]:
             D = np.array([A[1],A[0]*-1,0])
         elif A[0] < A[2]:
             D = np.array([0,A[2]*-1,A[1]])
@@ -177,15 +177,21 @@ def rotate_cw_around(A,B,angle=0):
     m0 = translate_to_align(A,[0,0,0,1])
     m1 = translate_to_align([0,0,0,1],A)
     axis = np.array(B[:3]) - np.array(A[:3])
-    axis = axis/np.linalg.norm(axis)
-    ax,ay,az=axis
-    s = np.sin(np.deg2rad(angle))
-    c = np.cos(np.deg2rad(angle))
-    d = 1 - c
-    m = [[c+ax*ax*d,ax*ay*d-az*s,ax*az*d+ay*s,0],
-         [ay*ax*d+az*s,c+ay*ay*d,ay*az*d-ax*s,0],
-         [az*ax*d-ay*s,az*ay*d+ax*s,c+az*az*d,0],
-         [0,0,0,1]]
+    if np.linalg.norm(axis) < 0.0001:
+        m=[[1,0,0,0],
+           [0,1,0,0],
+           [0,0,1,0],
+           [0,0,0,1]]
+    else:
+        axis = axis/np.linalg.norm(axis)
+        ax,ay,az=axis
+        s = np.sin(np.deg2rad(angle))
+        c = np.cos(np.deg2rad(angle))
+        d = 1 - c
+        m = [[c+ax*ax*d,ax*ay*d-az*s,ax*az*d+ay*s,0],
+             [ay*ax*d+az*s,c+ay*ay*d,ay*az*d-ax*s,0],
+             [az*ax*d-ay*s,az*ay*d+ax*s,c+az*az*d,0],
+             [0,0,0,1]]
     return m0@np.array(m).T@m1
 
 def rotate_dihedral_to(A,B,C,D,angle=0):

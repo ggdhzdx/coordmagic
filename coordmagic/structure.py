@@ -18,7 +18,7 @@ class Structure:
 
     def __init__(self, elem=[],atomnum=[],coord=[],fcoord=[],cell_vect=[],cell_param=[]):
         self.basename = ''
-        self.atoms = []  # list of atom, each atom is a defaultdict object
+        self.atoms = []  # list of atom, each atom is a defaultdict object, this is a core property
         self.period_flag = 0  # weather periodic structure
         self.cell_vect = cell_vect
         self.cell_param = cell_param
@@ -48,7 +48,7 @@ class Structure:
         #self.T = Transformer(self)
         #self.L = Layer(self)
         self.P = Parameter() # store all constant like atom radius, vdw parameters...
-        self.L = LabelAtom(self)
+        self.L = LabelAtom(self) # properties or descriptors that mapped to atom
         self.G = MolGraph(self)
         #self.MC = Cluster(self)
         #self.ML = label(self)
@@ -116,6 +116,10 @@ class Structure:
 
     def complete_self(self, wrap=False, reset_vect=True):
         '''re-Generate coords fcoords elems atomnums sn attribute from self.atoms
+        generate atomnum from elem or elem from atomnum
+        if both atomum or elem are missing, generate them from atomname
+        generate cell_param from cell_vect or cell_vect from cell_param
+        generate fcoord from coord or coord from fcoord
         reset_vect = True means reset a to x axis and b in xy plane
         wrap = True means move atoms outside cell inside. Cannot working when atoms with
         duplicate sn exist (image atom).

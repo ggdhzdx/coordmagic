@@ -66,6 +66,7 @@ class StructureReader:
                           'parmed': self._conver_parmed,
                           'mdanalysis': self._conver_mdanalysis,
                           'graph':self._conver_graph,
+                          'xyzstr':self._conver_xyzstr,
                           }
 
 
@@ -547,6 +548,45 @@ class StructureReader:
         for sn in sorted(list(self.struct_obj.nodes())):
             self.st.atoms.append(defaultdict(str,self.struct_obj.nodes[sn]))
             self.st.complete_self(wrap=False)
+
+    def _conver_xyzstr(self, cell_param='',cell_vect='',delimit=None,frac_coord=False):
+        '''generate structure object from string in the form:
+        C 0.5 0.6 0.7
+        H 0.4 0.4 0.7
+        O 0.1 0.2 0.3
+        the units are Angstrom
+        if frac_coord is True the cell_param or cell_vect should be provided
+        '''
+        if cell_param:
+            self.st.cell_param = cell_param
+        elif cell_vect:
+            self.st.cell_vect = cell_vect
+        else:
+            self.st.period_flag = 0
+        atoms = []
+        if not delimit:
+            coord_lines = self.struct_obj.splitlines()
+        else:
+            coord_lines = self.struct_obj.split(delimit)
+        for l in coord_lines:
+            e,x,y,z = l.split()
+            atom = defaultdict(str)
+            if e.isalpha():
+                atom['atomname'] = e
+            elif e.isdigit():
+                atom['atomnum'] = int(e)
+            else:
+                raise Exception("Wrong format of xyz coord string: {s}".format(l))
+            if frac_coord:
+                atom['fcoord'] = [float(i) for i in [x,y,z]]
+            else:
+                atom['coord'] = [float(i) for i in [x,y,z]]
+            atoms.append(atom)
+        self.st.complete_self(wrap=False)
+
+
+
+
 
 
 

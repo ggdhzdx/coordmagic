@@ -47,15 +47,24 @@ parser.add_argument('-P',dest='profile',help='store the common keywords in profi
                     'soc : read log file, remove opt, add "td(50-50,nstates=10) 6D 10F nosymm GFInput" and write rwf\n'
                     'st : step 1 "opt pbe1pbe def2svp em(gd3bj) g09default:\n'
                     '     step 2 "geom=allcheck guess=read pbe1pbe def2svp td(50-50,nstates=10) 6D 10F nosymm GFInput\n'
-                    'nac : read log file, remove "opt freq" add "td prop(fitcharge,field) iop(6/22=-4,6/29=1,6/30=0,6/17=2) nosymm"\n'}
+                    'nac : read log file, remove "opt freq" add "td prop(fitcharge,field) iop(6/22=-4,6/29=1,6/30=0,6/17=2) nosymm"\n')
 parser.add_argument('-f',dest='file',help='use keywords form other file')
 parser.add_argument('-F',dest='fragment',help='define fragment, available options are:\n'
                     'check : check the molecules in current geometry\n'
                     'auto : each mol is a frag, range from large to small\n'
                     'autotype : each mol type is a frag, range from large to small\n'
-                    '1,3-7;9-12 : atom index separated by semicolon\n'
+                    '1,3-7;9-12 : atom serial separated by semicolon, the last ";" means use remain atoms for last fragment \n'
+                    'L3-L1; : first frag is last 3 to last 1 atom, second frag is the remaining atoms \n'
                     'm1-3;m2,4 : mol index separated by semicolon\n'
                     't1,2;t3-4 : mol type index separated by semicolon\n', default='')
+parser.add_argument('--fragset',dest='fragset',help='define distance threshold to separate molecules\n'
+                    'the defaults are: cov_scale:1.1;cov_delta:0;usrcovr:"";usrcovth:""\n'
+                    'the threshold for determining bond is defined as:\n'
+                    '(covalent_radii_atom1 + covalent radii_atom2) * cov_scale + cov_delta\n'
+                    'usrcovr can define covalent radii for the specific element.\n'
+                    'The format is like "C=3.5,H=1.2\n'
+                    'usrcovth can define specific covalent distance threshold for specific element pairs\n'
+                    'The format is like "C-H=1.0,C-S=1.7"\n')
 parser.add_argument('-c',dest='charge_spin',help='set the charge and spin for the system. Seperated by space. e.g. \"-1 2\". Default: read from file. If not exit, set to 0,1',default='')
 parser.add_argument('--readchk',help='By default, using this option will use guess=read keywords if chk file has been found.',action='store_true')
 parser.add_argument('--irc', help='Generate reactant and product input file based on irc output file.\n'
@@ -65,6 +74,7 @@ parser.add_argument('--irc', help='Generate reactant and product input file base
 parser.add_argument('--addinfo',help='additional information that append in Gaussian input, seperate multiple line by ;')
 parser.add_argument('--steps', help='set keywords for multiple step job. Seperate multiple step keywords by ;', type=str, default='')
 parser.add_argument('--rwf', help='write rwf file with same name as chk', action='store_true')
+parser.add_argument('--freeze', help='set the atom name to freeze')
 parser.add_argument('--element_only',help='By default, addition infomation that follows element (such as fragment info) will be included.\n'
                     'Use this option to prohibit this action.',action='store_true')
 parser.add_argument('--kwtype',help='set the user input kwtype. gaussian and orca is now available. Input first three letters is enough. Default depends first on file type and then program type')
@@ -74,28 +84,19 @@ parser.add_argument('inputfile',nargs='+',help='the input structures can be gjf,
                     'cdx(one cdx should contain only 1 structure, and latest version of obabel should be in PATH)')
 
 class Fragment:
-    def __init__(self,pf):
+    def __init__(self,coord,fragset=''):
         import coordmagic as cm
-        st = cm.read_structure(pf.fchkfile)
+        from coordmagic.atomorder import snr2l, snl2r
+        self.snr2l = snr2l
+        self.snl2r = snl2r
+        st = cm.conver_structure(coord,obj_type='xyz',islist=True)
+        if fragset:
+            fragset_dict = {i.split(':')[0]:i.split(':')[1] for i in fragset.split(';')}
+            st.G.set_threshold(**fragset_dict)
         st.G.gen_mol(silent=True)
         self.frag2idx = {}
         self.st = st
         self.df = self.st.mol_df[["id","type_id","formula",'sn_range']]
-    def r2l(self,rstr):
-        l = []
-        for i in rstr.split(','):
-            if '-' in i:
-                i1 = int(i.split('-')[0])
-                i2 = int(i.split('-')[1])
-                if i1 > i2:
-                    i1, i2 = i2, i1
-                l = l + list(range(i1, i2+1))
-            else:
-                try:
-                    l = l + [int(i)]
-                except ValueError:
-                    pass
-        return l
     def parser_str(self,frag_str):
         print(self.df.to_string(index=False))
         mol2idx = self.df[["id",'sn_range']].set_index('id').to_dict()['sn_range']
@@ -107,16 +108,22 @@ class Fragment:
         elif frag_str != 'check':
             for i,s in enumerate(frag_str.split(';')):
                 if s.startswith('m'):
-                    ids = ','.join([mol2idx[i] for i in self.r2l(s.strip('m'))])
+                    ids = ','.join([mol2idx[i] for i in self.snr2l(s.strip('m'))])
                     self.frag2idx[i+1] = ids
                 elif s.startswith('t'):
-                    ids = ','.join([mtype2idx[i] for i in self.r2l(s.strip('t'))])
+                    ids = ','.join([mtype2idx[i] for i in self.snr2l(s.strip('t'))])
                     self.frag2idx[i+1] = ids
                 else:
-                    self.frag2idx[i+1] = s
+                    if s != '':
+                        self.frag2idx[i+1] = self.snl2r(self.snr2l(s,total=len(self.st.atoms)))
+                    else:
+                        remain = self.snr2l(','.join(self.frag2idx.values()),total=len(self.st.atoms),complement=True)
+                        s = self.snl2r(remain)
+                        self.frag2idx[i+1] = s
         if frag_str != 'check':
             print("Fragments:")
             print(str(self.frag2idx).replace(', ', '\n').replace(': ', ':\t').replace('{', '').replace('}', ''))
+            self.frag2idx_list = {k:self.snr2l(v,total=len(self.st.atoms)) for k,v in self.frag2idx.items()}
 
 class basisSet:
     '''analysis basis set'''
@@ -215,14 +222,12 @@ class keyword:
                 block_str+='end\n'
             return block_str
 
-
     def add_kw(self,add_dict):
         for k,v in add_dict.items():
             if k in self.kw_dict:
                 self.kw_dict[k].update(v)
             elif k:
                 self.kw_dict[k]=v
-
     def rm_kw(self,rm_dict):
         for key,v_dict in rm_dict.items():
             if key in self.kw_dict:
@@ -367,10 +372,10 @@ class inputParam:
         self.update_param(irc=self.args.irc)
 
     def _apply_profile(self):
-        self.profile={'opt':{'keywords':'opt pbe1pbe def2svp emp=gd3bj g09default iop(5/13=1)'},
+        self.profile={'opt':{'keywords':'opt pbe1pbe def2svp emp=gd3bj g09default scf(maxcycle=64) iop(5/13=1)'},
                       'ts':{'add_keywords':'opt(ts,calcall,noeigentest) freq'},
                       'freq':{'rm_keywords':'opt','add_keywords':'freq'},
-                      'irc':{'rm_keywords':'opt freq','add_keywords':'irc(calcall,gs2,maxpoints=30)'},
+                      'irc':{'rm_keywords':'opt freq','add_keywords':'irc(calcall,lqa,maxpoints=50)'},
                       'uv':{'rm_keywords':'opt freq','add_keywords':'td(singlets,nstates=30)'},
                       'fluo':{'add_keywords':'opt td'},
                       'resp':{'keywords':'opt b3lyp def2SVP scrf=pcm emp=gd3bj pop=mk iop(6/33=2) iop(6/42=6)'},
@@ -423,11 +428,24 @@ class inputParam:
         self.geom.compute_formula()
         self.all_elem=self.geom.elem
         self.xyz_coord= self.geom.xyz_coord
+        self.pure_coords = self.geom.gen_coord()
         if self.element_only or not self.suffix.endswith('gjf'):
-            self.coords=self.geom.gen_coord()
+            self.coords = self.pure_coords
 
     def generate_fragment(self):
-        pass
+        basenames = [self.base_name]
+        coord_list = [self.coords]
+        if self.args.fragment != '':
+            frag = Fragment(self.pure_coords,fragset=self.args.fragset)
+            frag.parser_str(self.args.fragment)
+            if self.args.fragment != 'check':
+                basenames = []
+                coord_list = []
+                for f,idx in frag.frag2idx_list.items():
+                    basenames.append('{:s}_{:02d}'.format(self.base_name,f))
+                    coord_list.append([self.coords[i-1] for i in idx])
+        self.basenames = basenames
+        self.coord_list = coord_list
 
     def gen_atomic_basis(self):
         if self.basis_set:
@@ -492,7 +510,7 @@ class inputParam:
     def read_input_file(self):
         if self.suffix=='.gjf' or self.suffix=='.com':
             self._read_gauinp()
-        if self.suffix=='.log':
+        if self.suffix=='.log' or self.suffix=='.out':
             self._read_gauout()
         if self.suffix=='.cdx':
             self._read_cdx()
@@ -512,32 +530,31 @@ class inputParam:
             for l in inp:
                 if 'Multiplicity =' in l and 'Charge =' in l:
                     read_init = 1
-                    continue 
+                    charge = l.strip().split()[2]
+                    spin = l.strip().split()[5]
+                    charge_spin = [charge,spin]
+                    self.update_param(charge_spin=' '.join(charge_spin))
+                    continue
                 if read_init == 1 and re.match('^\s*$',l):
                     read_init = 0
                 if read_init == 1 and len(l.strip().split()) > 3:
                     freeze_flag.append(l.split()[1])
                 if l.startswith(' %nproc'):
                     nproc = l.strip().split('=')[1]
-                    self.param.update_param(nproc=nproc)
+                    self.update_param(nproc=nproc)
                 if l.startswith(' %mem'):
                     mem = l.strip().split('=')[1]
-                    self.param.update_param(mem=mem)
+                    self.update_param(mem=mem)
                 if '----------' in l and kw_flag == 3:
                     kw_flag = 2
                 elif '----------' in l and kw_flag == 1:
                     kw_flag = 0
                 if l.startswith(' #') and kw_flag == 2:
                     kw_flag = 1
-                    kw = l.strip()
+                    kw = l[1:].rstrip("\n")
                     continue
                 if kw_flag == 1:
-                    kw = kw + l.strip()
-                if l.startswith(' Charge = '):
-                    charge = l.strip().split()[2]
-                    spin = l.strip().split()[5]
-                    charge_spin = [charge,spin]
-                    self.update_param(charge_spin=' '.join(charge_spin))
+                    kw = kw + l[1:].rstrip("\n")
                 if 'Standard orientation' in l or 'Input orientation' in l:
                     coords = []
                     read_coord = -1
@@ -588,6 +605,7 @@ class inputParam:
         cs_read = 0
         file_end = 0
         kw_flag = 0
+        freeze_flag = []
         with open(self.filename,'r') as inp:
             coords=[]
             for l in inp:
@@ -605,14 +623,18 @@ class inputParam:
                     kw_flag=1
                     continue
                 if kw_flag == 1 and not re.match('^\s*$',l):
-                    keywords = keywords + l.strip()
+                    keywords = keywords +" "+ l.strip()
                 else:
                     kw_flag = 0
                 if cs_read == 1 and re.match('^\s*$',l):
                     cs_read = 2
                     continue
                 if cs_read == 1:
-                    coords.append(l.strip())
+                    if len(l.strip().split()) > 4:
+                        freeze_flag.append(l.split()[1])
+                        coords.append("  ".join([l.split()[0]]+l.split()[2:]).strip())
+                    elif len(l.strip().split()) == 4:
+                        coords.append(l.strip())
                 if cs_read == 2:
                     if file_end == 1 and re.match('^\s*$',l):
                         file_end = 2
@@ -651,6 +673,10 @@ class inputParam:
             self.kw_type = 'gau'
             self.update_param(keywords = keywords.strip())
             self.coords=coords
+            if all([i in ['0','-1','-2','-3'] for i in freeze_flag]):
+                self.freeze_flag = freeze_flag
+            else:
+                self.freeze_flag = []
             print('keywords read: \"{:s}\"'.format(keywords))
 
     def _read_cdx(self):
@@ -728,37 +754,42 @@ class writeOut:
         self.param=param
 
     def write_qcinput(self):
-        if self.param.program.lower().startswith('gau'):
-            self._write_gaussian()
-        elif self.param.program.lower().startswith('orc'):
-            self._write_orca()
-        elif self.param.program.lower().startswith('dal'):
-            self._write_dalton()
-        else:
-            print('-p option {:s} not recognized'.format(self.param.program))
+        for i,bn in enumerate(self.param.basenames):
+            if self.param.program.lower().startswith('gau'):
+                self._write_gaussian(basename=bn,coord=self.param.coord_list[i])
+            elif self.param.program.lower().startswith('orc'):
+                self._write_orca(basnname=bn,coord=self.param.coord_list[i])
+            elif self.param.program.lower().startswith('dal'):
+                self._write_dalton(basename=bn,coord=self.param.coord_list[i])
+            else:
+                print('-p option {:s} not recognized'.format(self.param.program))
 
-    def _write_gaussian(self):
-        flnm=self.param.base_name+'.gjf'
+    def _write_gaussian(self,basename='',coord=None):
+        if basename is None:
+            basename = self.param.base_name
+        flnm = basename + '.gjf'
         print('{:s}: keywords used: \"{:s}\"'.format(flnm,self.param.keywords))
         with open(flnm,'w') as gjf:
             if self.param.new_chk == 0 or self.param.read_chk == 1:
-                gjf.write('%chk='+self.param.base_name+'.chk\n')
+                gjf.write('%chk='+basename+'.chk\n')
             if self.param.new_chk == 1 and self.param.read_chk == 1:
                 gjf.write('%oldchk='+self.param.origin_name+'.chk\n')
             if self.param.rwf:
-                gjf.write('%rwf='+self.param.base_name+'.rwf\n')
+                gjf.write('%rwf='+basename+'.rwf\n')
             gjf.write('%nproc='+self.param.nproc+'\n')
             gjf.write('%mem='+self.param.mem+'\n')
             gjf.write(self.param.keywords+'\n')
             gjf.write('\n')
-            gjf.write(self.param.base_name+'\n')
+            gjf.write(basename+'\n')
             gjf.write('\n')
             gjf.write(self.param.charge_spin+'\n')
-            if len(self.param.freeze_flag) ==  len(self.param.coords):
-                for i,c in enumerate(self.param.coords):
+            if coord is None:
+                coord = self.param.coords
+            if len(self.param.freeze_flag) ==  len(coord):
+                for i,c in enumerate(coord):
                     gjf.write(c.split()[0]+'  '+self.param.freeze_flag[i] + '  ' + '  '.join(c.split()[1:])+'\n')
             else:
-                for i,c in enumerate(self.param.coords):
+                for i,c in enumerate(coord):
                     gjf.write(c+'\n')
             gjf.write('\n')
             if not self.param.noextra:
@@ -787,8 +818,8 @@ class writeOut:
             if self.param.steps:
                 for i,com in enumerate(self.param.steps.split(';')):
                     gjf.write('--Link{:d}--\n'.format(i+1))
-                    gjf.write('%rwf='+self.param.base_name+'.rwf\n')
-                    gjf.write('%chk='+self.param.base_name+'.chk\n')
+                    gjf.write('%rwf='+basename+'.rwf\n')
+                    gjf.write('%chk='+basename+'.chk\n')
                     gjf.write('%nproc='+self.param.nproc+'\n')
                     gjf.write('%mem='+self.param.mem+'\n')
                     if not com.startswith('#'):
@@ -797,17 +828,26 @@ class writeOut:
             gjf.write('\n')
             gjf.write('\n')
 
-    def _write_xyz(self):
-        xyz = open(self.param.base_name+'.xyz','w')
-        xyz.write('{:d}\n'.format(len(self.param.coords)))
-        xyz.write('{:s}\n'.format(self.param.base_name))
+    def _write_xyz(self,basename=None,coord=None):
+        if basename is None:
+            basename = self.param.base_name
+        if coord is None:
+            coord = self.param.coords
+        xyz = open(basename+'.xyz','w')
+
+        xyz.write('{:d}\n'.format(len(coord)))
+        xyz.write('{:s}\n'.format(basename))
         for c in self.param.coords:
             xyz.write(c+'\n')
         xyz.close()
 
 
-    def _write_orca(self):
-        flnm=self.param.base_name+'.inp'
+    def _write_orca(self,basename=None,coord=None):
+        if basename is None:
+            basename = self.param.base_name
+        if coord is None:
+            coord = self.param.coords
+        flnm=basename + '.inp'
         inp = open(flnm,'w')
         print('{:s}: keywords used: \"{:s}\"'.format(flnm,self.param.keywords.strip()))
         inp.write(self.param.keywords)
@@ -822,16 +862,20 @@ class writeOut:
         inp.write('     end\n')
         inp.write('%MaxCore {:d}\n'.format(mem_per_core))
         if 'opt' in self.param.keywords:
-            xyzfile=self.param.base_name+'.xyz'
+            xyzfile=basename+'.xyz'
             inp.write('* xyzfile {:s} {:s}\n'.format(self.param.charge_spin,xyzfile))
-            self._write_xyz()
+            self._write_xyz(basename=basename,coord=coord)
         else:
             inp.write('* xyz {:s}\n'.format(self.param.charge_spin))
-            for c in self.param.coords:
+            for c in coord:
                 inp.write(c+'\n')
             inp.write('*\n')
 
-    def _write_dalton(self):
+    def _write_dalton(self,basename=None,coord=None):
+        if basename is None:
+            basename = self.param.base_name
+        if coord is None:
+            coord = self.param.coords
         ec = sorted(zip(self.param.all_elem,self.param.xyz_coord),key=lambda
                     x:self.param.ele2num[x[0]])
         elements = []
@@ -847,13 +891,13 @@ class writeOut:
                 lb = self.param.basis_set.split(',')[0]
                 hb = self.param.basis_set.split(',')[1]
         elif self.param.basis_set == 'unknown' or self.param.basis_set == 'pseudo':
-            print('{:s} basis cannot be convert to daltion basis, please input basis set by -b option'.format(self.methods.basis))
+            print('{:s} basis cannot be convert to dalton basis, please input basis set by -b option'.format(self.methods.basis))
             sys.exit()
         else:
             lb = self.param.basis_set
-        inp = open(self.param.base_name+'.mol','w')
+        inp = open(basename+'.mol','w')
         inp.write('ATOMBASIS\n')
-        inp.write(self.param.base_name+'\n')
+        inp.write(basename+'\n')
         inp.write('dalton structure input generated by inpgen_qc.py\n')
         inp.write('Atomtypes={:d} Charge={:s} Angstrom\n'.
                   format(len(elements),self.param.charge_spin.split()[0]))
@@ -876,7 +920,7 @@ class writeOut:
                 coord = list(groups[i][j][1])
                 ec='{:<5s}{:>13.6f}{:>13.6f}{:>13.6f}'.format(*([ele]+coord))
                 inp.write(ec+'\n')
-        dal = open(self.param.base_name+'.dal','w')
+        dal = open(basename+'.dal','w')
         dal.write('**DALTON INPUT\n')
         dal.write('.RUN RESPONSE\n')
         dal.write('#**INTEGRALS\n')

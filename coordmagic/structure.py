@@ -71,9 +71,6 @@ class Structure:
             self.cell_param = self.frames_box[n]
         self.complete_self(reset_vect=False)
 
-
-
-
     # def new_frame(self, n=0):
     #     '''set current frame to new frame
     #     the serial number of new frame is current max serial number plus one'''

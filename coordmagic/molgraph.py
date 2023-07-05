@@ -14,7 +14,7 @@ from . import structure
 from .parameter import Parameter
 from .measurement import angle as measure_angle
 from .measurement import torsion as measure_dihedral
-from .reorderatom import snl2r
+from .atomorder import snl2r
 #from .structurewriter import  write_structure
 
 __all__ = [
@@ -91,7 +91,6 @@ class MolGraph:
         self.unwrap_mol_record = defaultdict(str)
 
 
-
     def graph2struct(self, graph, pbc='auto'):
         '''generate structure object from a graph
         you may not need this function if the graph is a subgraph
@@ -121,9 +120,6 @@ class MolGraph:
         boundary. Inter atom distance smaller than edge_dist_th will be designate as an edge
         the self.S.graph properties will be generated
         '''
-
-
-
         if self.S.period_flag:
             s = add_image_atom(self.S, expand_length)
         else:

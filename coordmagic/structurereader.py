@@ -36,11 +36,14 @@ def read_structure(inputfile,filetype=''):
     sr.st.complete_self(wrap=False)
     return sr.st
 
-def conver_structure(struct_obj,obj_type,**kwargs):
+def conver_structure(struct_obj,obj_type='',**kwargs):
     sr = StructureReader()
     sr.st = structure.Structure()
     sr.struct_obj = struct_obj
-    sr.read_func[obj_type](**kwargs)
+    if obj_type in sr.read_func:
+        sr.read_func[obj_type](**kwargs)
+    else:
+        exit("Error!!! object type {:s} not supported to convert to cm structure".format(obj_type))
     sr.st.complete_self()
     return sr.st
 
@@ -66,7 +69,7 @@ class StructureReader:
                           'parmed': self._conver_parmed,
                           'mdanalysis': self._conver_mdanalysis,
                           'graph':self._conver_graph,
-                          'xyzstr':self._conver_xyzstr,
+                          'xyz':self._conver_xyz,
                           }
 
 
@@ -549,13 +552,15 @@ class StructureReader:
             self.st.atoms.append(defaultdict(str,self.struct_obj.nodes[sn]))
             self.st.complete_self(wrap=False)
 
-    def _conver_xyzstr(self, cell_param='',cell_vect='',delimit=None,frac_coord=False):
+    def _conver_xyz(self, cell_param='',cell_vect='',islist=False, delimit=None,frac_coord=False):
         '''generate structure object from string in the form:
         C 0.5 0.6 0.7
         H 0.4 0.4 0.7
         O 0.1 0.2 0.3
         the units are Angstrom
         if frac_coord is True the cell_param or cell_vect should be provided
+        delimit is used to seperate lines
+
         '''
         if cell_param:
             self.st.cell_param = cell_param
@@ -564,7 +569,9 @@ class StructureReader:
         else:
             self.st.period_flag = 0
         atoms = []
-        if not delimit:
+        if islist:
+            coord_lines = self.struct_obj
+        elif not delimit:
             coord_lines = self.struct_obj.splitlines()
         else:
             coord_lines = self.struct_obj.split(delimit)
@@ -582,6 +589,7 @@ class StructureReader:
             else:
                 atom['coord'] = [float(i) for i in [x,y,z]]
             atoms.append(atom)
+        self.st.atoms = atoms
         self.st.complete_self(wrap=False)
 
 

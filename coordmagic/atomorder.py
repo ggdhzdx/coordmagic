@@ -1,11 +1,13 @@
 import networkx as nx
 import numpy as np
 import coordmagic as cm
+import copy
 import sys
 
 __all__ = [
     'snr2l',
-    'snl2r'
+    'snl2r',
+    'sort_atom_by_sn'
 ]
 
 
@@ -31,6 +33,13 @@ def compute_atom_score(mol):
     #         a['topo_score'] = a['atomnum'] * 10000
     # for n,a in G.nodes(data=True):
     #     a['topo_score']
+def sort_atom_by_sn(struct,sn_list):
+    '''sort atoms in struct by sn list and return a new structure'''
+    s = copy.deepcopy(struct)
+    s.atoms = [s.atoms[i-1] for i in sn_list]
+    s.complete_self()
+    s.reset_sn()
+    return s
 
 def snr2l(snr,total=0,complement=False):
     '''input a sn range str, return a sn list

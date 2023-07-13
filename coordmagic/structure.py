@@ -293,12 +293,12 @@ class Structure:
     def extract_struc(self, sn, reset_sn=False):
         '''sn is a list of atom sn '''
         s = Structure()
-        s.atoms = [i for i in self.atoms if i['sn'] in sn]
+        s.atoms = copy.deepcopy([i for i in self.atoms if i['sn'] in sn])
         s.cell_vect = self.cell_vect
         s.cell_param = self.cell_param
         s.complete_self()
-        if self.S.graph:
-            s.graph = copy.deepcopy(nx.subgraph(self.S.graph,sn).copy())
+        if self.graph:
+            s.graph = copy.deepcopy(nx.subgraph(self.graph,sn).copy())
         if reset_sn == True:
             s.reset_sn()
         return s

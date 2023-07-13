@@ -7,7 +7,8 @@ import sys
 __all__ = [
     'snr2l',
     'snl2r',
-    'sort_atom_by_sn'
+    'sort_atom_by_sn',
+    'sort_atom_by_mol',
 ]
 
 
@@ -40,6 +41,19 @@ def sort_atom_by_sn(struct,sn_list):
     s.complete_self()
     s.reset_sn()
     return s
+
+def sort_atom_by_mol(struct):
+    '''sort atoms in struct by mol
+    However, the atom order in each mol is not controlled
+    and the order of mol is not controlled
+    '''
+    if len(struct.molecules) == 0:
+        struct.G.gen_mol()
+    newsn = []
+    for id, mol in struct.molecules.items():
+        newsn += mol['sn']
+    new_st = sort_atom_by_sn(struct, newsn)
+    return new_st
 
 def snr2l(snr,total=0,complement=False):
     '''input a sn range str, return a sn list

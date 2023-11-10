@@ -193,40 +193,70 @@ def frag_by_trimatom(mol,keep='',remove='',size=0, nfrag=1, nohydrogen=True, tri
     return all_frags
 
 
-def connect_frag(fragA,fragB,joinsite=''):
+def connect_frag(fragA,fragB,joinsite='',breadth_first=False):
     '''connect two fragments by their site name and return a new frag
     the format for join is D1-A1,D2-A2
     if joinsite is not specified, then the function will try to find the
     match by following rules:
     1. A2 will match with B2 or B21 but not with B3 or B31
-    2. A21 will match with B21 but not with B22 or B223
-    3. site label A will match with any site label such as B1 B81 Baxy
-    4. If fragB has two sites: A1 and B1 and fragA has one site A1, then A1-B1 has higher priority than A1-A1
+    2. A21 will match with B21 but not with B22 or B223 for homo polymers
+    3. A2t will  match A2h, A2 but not with A2t
+    4. A21 will match A21 bat not A22
+    5. site label A will match with any site label such as B1 B81 Baxy
+    6. If fragB has two sites: A1 and B1 and fragA has one site A1, then A1-B1 has higher priority than A1-A1
     5. only one site pair will kept
     To specify join site manually, the format is
     joinsite=A1-B2,A3-B4
     in this case two join site could be specified
     when two frag are connected, only parent info of fragA will be kept
+    if breadth_first==True the new site will attach to early sites if multi-site are available
     '''
     param=Parameter()
     #parser join site
     valid_sp = []
-    site_pair0= []
-    site_pair1= []
+    site_pair= []
     # first try to find site if not specified
     if not joinsite:
         for sa in fragA['site'].keys():
+            tail_label_a=''
+            sitea_sn=0
+            try:
+                sitea_sn=int(sa.split('_')[1])
+                sitea_sn_label='_'+str(sitea_sn)
+            except IndexError:
+                sitea_sn_label=''
+                sitea_sn=0
+            sa=sa.split('_')[0]
+            if len(sa) > 1 and sa[-1].isalpha():
+                tail_label_a = sa[-1]
+                sa=sa[:-1]
             for sb in fragB['site'].keys():
+                siteb_sn=0
+                try:
+                    siteb_sn=int(sa.split('_')[1])
+                    siteb_sn_label='_'+str(siteb_sn)
+                except IndexError:
+                    siteb_sn=0
+                    siteb_sn_label=''
+                sb=sb.split('_')[0]
+                tail_label_b=''
+                if len(sb) > 1 and sb[-1].isalpha():
+                    tail_label_b = sb[-1]
+                    sb=sb[:-1]
                 compare_len = min(len(sa),len(sb))
-                if sa[1:compare_len] == sb[1:compare_len] and sa[0] != sb[0]:
-                    site_pair0.append((sa,sb))
-                elif sa[1:compare_len] == sb[1:compare_len] and sa[0] == sb[0]:
-                    site_pair1.append((sa, sb))
-        if len(site_pair0+site_pair1) == 0:
+                if sa[1:compare_len] == sb[1:compare_len]:
+                    if not tail_label_a or not tail_label_b:
+                        site_pair.append((sa+tail_label_a+sitea_sn_label,sb+tail_label_b+siteb_sn_label,siteb_sn+sitea_sn))
+                    elif tail_label_a != tail_label_b:
+                        site_pair.append((sa+tail_label_a+sitea_sn_label,sb+tail_label_b+siteb_sn_label,siteb_sn+sitea_sn))
+        if len(site_pair) == 0:
             print('Error! Could not find site to join')
             sys.exit()
         else:
-            site_pair = (site_pair0+site_pair1)[:1]
+            if breadth_first:
+                site_pair = [[i[:2] for i in sorted(site_pair,key=lambda x:x[2])][0]]
+            else:
+                site_pair = [[i[:2] for i in sorted(site_pair,key=lambda x:x[2],reverse=True)][0]]
     else:
         site_pair = [tuple(i.split('-')) for i in joinsite.split(',')]
 
@@ -240,8 +270,8 @@ def connect_frag(fragA,fragB,joinsite=''):
         print('Error! no valid site found in fragA or fragB by {:s}'
               .format(joinsite))
     else:
-        print('site-pair to connect is {:s}'
-              .format(','.join(['-'.join(i) for i in valid_sp])))
+        print('site-pair to connect is {:s},'
+              .format(','.join(['-'.join(i) for i in valid_sp])),end=" ")
     site_pair = valid_sp
 
     # collect atom sn around the site. These atoms will be used to align the fragments
@@ -406,11 +436,37 @@ def connect_frag(fragA,fragB,joinsite=''):
     site_left_B = {k:v for k,v in fragB['site'].items() if k not in [p[1] for p in site_pair]}
     new_siteA = {k:tuple([mappingA[i] for i in v]) for k,v in site_left_A.items()}
     new_siteB = {k:tuple([mappingB[i] for i in v]) for k,v in site_left_B.items()}
-    new_siteA.update(new_siteB)
-    new_frag['site'] = new_siteA  # site is based
     new_siteA_sn = {k:tuple([mappingA[i] for i in fragA['offcut'][k]]) for k in site_left_A.keys()}
     new_siteB_sn = {k:tuple([mappingB[i] for i in fragB['offcut'][k]]) for k in site_left_B.keys()}
-    new_siteA_sn.update(new_siteB_sn)
+    all_sn=[0]
+    for key in fragA['site'].keys():
+        try:
+            sitesn=int(key.split('_')[1])
+        except IndexError:
+            sitesn=0
+        all_sn.append(sitesn)
+    current_site_sn=max(all_sn)
+    for key in new_siteB.keys():
+        new_key=key.split('_')[0]+'_'+str(current_site_sn+1)
+        new_siteA[new_key]=new_siteB[key]
+        new_siteA_sn[new_key]=new_siteB_sn[key]
+   # for key in new_siteB.keys():
+   #     if key not in new_siteA:
+   #         new_siteA[key]=new_siteB[key]
+   #         new_siteA_sn[key]=new_siteB_sn[key]
+   #     else:
+   #         try:
+   #             sitesn=int(key.split('_')[1])
+   #         except IndexError:
+   #             sitesn=0
+   #         new_key=key.split('_')[0]+'_'+str(sitesn+1)
+   #         while new_key in new_siteA:
+   #             sitesn+=1
+   #             new_key=key.split('_')[0]+'_'+str(sitesn+1)
+   #         new_siteA[new_key]=new_siteB[key]
+   #         new_siteA_sn[new_key]=new_siteB_sn[key]
+    print("Left site: {:s}".format(",".join([i for i in new_siteA.keys()])))
+    new_frag['site'] = new_siteA  # site is based
     new_frag['offcut'] = new_siteA_sn
     new_frag['graph'] = fragAB
     new_frag['mol'] = fragA['mol']

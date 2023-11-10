@@ -3,10 +3,16 @@ import numpy as np
 import networkx as nx
 from .measurement import torsion
 
-'''note that different function requires different input and return different result 
-   function contain st means it requires a structure object and will return a structure
-   function contain mol mean it requires a graph object and will return a graph
-   other functions will take coordinate as input are return transform matrix
+'''
+note that different function requires different input and return different result 
+function contain st means it requires a structure object and will return a structure
+function contain mol mean it requires a graph object and will return a graph
+other functions will take coordinate as input are return transform matrix
+the coordinates matrix C should have the format:
+    [[x,y,z,1],
+     [x,y,z,1]]
+and the transformation should be performed by
+    C@m
 '''
 
 
@@ -168,7 +174,8 @@ def rotate_to_align(A,B,C=[0,0,0,1]):
 
 def rotate_cw_around(A,B,angle=0):
     '''rotate around axis defined by A and B by angle (in degree)
-    where  A is near the observer and the rotation will be cw'''
+    where  A is near the observer and the rotation will be cw
+    return a 4X4 transfermer matrix'''
     # fist move to A to origin
     if len(A) == 3:
         A=np.append(A,1)

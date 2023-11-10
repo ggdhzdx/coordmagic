@@ -74,7 +74,7 @@ parser.add_argument('--irc', help='Generate reactant and product input file base
 parser.add_argument('--addinfo',help='additional information that append in Gaussian input, seperate multiple line by ;')
 parser.add_argument('--steps', help='set keywords for multiple step job. Seperate multiple step keywords by ;', type=str, default='')
 parser.add_argument('--rwf', help='write rwf file with same name as chk', action='store_true')
-parser.add_argument('--freeze', help='set the atom name to freeze')
+parser.add_argument('--freeze', help='set no to unfreeze all atoms')
 parser.add_argument('--element_only',help='By default, addition infomation that follows element (such as fragment info) will be included.\n'
                     'Use this option to prohibit this action.',action='store_true')
 parser.add_argument('--kwtype',help='set the user input kwtype. gaussian and orca is now available. Input first three letters is enough. Default depends first on file type and then program type')
@@ -287,7 +287,7 @@ class GeomAna:
                     'Eu': 63, 'Gd': 64, 'Tb': 65, 'Dy': 66, 'Ho': 67, 'Er': 68,
                     'Tm': 69, 'Yb': 70, 'Lu': 71, 'Hf': 72, 'Ta': 73, 'W': 74,
                     'Re': 75, 'Os': 76, 'Ir': 77, 'Pt': 78, 'Au': 79, 'Hg': 80,
-                    'Tl': 81, 'Pb': 82, 'Bi': 83, 'Po': 84, 'At': 85, 'Bq': 0,
+                        'Tl': 81, 'Pb': 82, 'Bi': 83, 'Po': 84, 'At': 85, 'U': 92,'Bq': 0,
                     }
         self.num2ele = dict((value,key) for key,value in self.ele2num.items())
         self._ana_coord()
@@ -673,7 +673,7 @@ class inputParam:
             self.kw_type = 'gau'
             self.update_param(keywords = keywords.strip())
             self.coords=coords
-            if all([i in ['0','-1','-2','-3'] for i in freeze_flag]):
+            if all([i in ['0','-1','-2','-3'] for i in freeze_flag]) and self.args.freeze != "no":
                 self.freeze_flag = freeze_flag
             else:
                 self.freeze_flag = []
@@ -683,7 +683,7 @@ class inputParam:
         #first to check if obabel exist
         no_babel=0
         try:
-            pbabel=subprocess.Popen(['obabel',self.param.filename,'-O','obabel_temp.xyz','--gen3d','--conformer','--fast','--score','energy','--ff','GAFF'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+            pbabel=subprocess.Popen(['obabel',self.filename,'-O','obabel_temp.xyz','--gen3d','--conformer','--fast','--score','energy','--ff','GAFF'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
         except OSError:
             print('Error! no obabel command found. Plead install openbabel or add the obabel command to your PATH environment variables. cdx file will not be converted.')
             no_babel=1
@@ -691,11 +691,11 @@ class inputParam:
         out=out.decode(encoding='UTF-8')
         if 'Could not setup force field.' in out:
             print('MMFF failed, try GAFF')
-            pbabel=subprocess.Popen(['obabel',self.param.filename,'-O','obabel_temp.xyz','--gen3d','--conformer','--fast','--score','energy','--ff','GAFF'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+            pbabel=subprocess.Popen(['obabel',self.filename,'-O','obabel_temp.xyz','--gen3d','--conformer','--fast','--score','energy','--ff','GAFF'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
             out,err=pbabel.communicate()
         if 'Could not setup force field.' in out:
             print('GAFF failed, try UFF')
-            pbabel=subprocess.Popen(['obabel',self.param.filename,'-O','obabel_temp.xyz','--gen3d','--conformer','--fast','--score','energy','--ff','UFF'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+            pbabel=subprocess.Popen(['obabel',self.filename,'-O','obabel_temp.xyz','--gen3d','--conformer','--fast','--score','energy','--ff','UFF'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
             out,err=pbabel.communicate()
         if 'Could not setup force field.' in out:
             print('UFF failed, can not convert cdx')
@@ -704,7 +704,7 @@ class inputParam:
             try:
                 n_mol = int(out[0].split()[0])
                 if n_mol > 1:
-                    print('Warning! {:d} molecules converted for {:s}. Only first molecule will be read.'.format(n_mol,self.param.filename))
+                    print('Warning! {:d} molecules converted for {:s}. Only first molecule will be read.'.format(n_mol,self.filename))
             except:
                 pass
             # read temp.xyz
@@ -785,7 +785,7 @@ class writeOut:
             gjf.write(self.param.charge_spin+'\n')
             if coord is None:
                 coord = self.param.coords
-            if len(self.param.freeze_flag) ==  len(coord):
+            if len(self.param.freeze_flag) ==  len(coord) and self.param.args.freeze != "no":
                 for i,c in enumerate(coord):
                     gjf.write(c.split()[0]+'  '+self.param.freeze_flag[i] + '  ' + '  '.join(c.split()[1:])+'\n')
             else:

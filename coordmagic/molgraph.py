@@ -127,7 +127,7 @@ class MolGraph:
         # print(s.atoms)
         tree = cKDTree(s.coord)
         dist_mat = cKDTree.sparse_distance_matrix(tree, tree, edge_dist_th)
-        G = nx.from_scipy_sparse_matrix(dist_mat)
+        G = nx.from_scipy_sparse_array(dist_mat)
         mapping = {i:j['sn'] for i,j in enumerate(s.atoms)}
         G = nx.relabel_nodes(G, mapping, copy=True)
         nx.set_node_attributes(G,{i['sn']:i for i in self.S.atoms})

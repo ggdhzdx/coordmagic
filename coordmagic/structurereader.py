@@ -14,7 +14,6 @@ def read_structure(inputfile,filetype=''):
         sr.file = open(inputfile, 'r')
         filename = os.path.basename(inputfile)
         sr.basename, ext = os.path.splitext(filename)
-        sr.st.basename = sr.basename
     except TypeError:
         sys.exit('coordmagic: Error! The input {:s} is not a file'
                  .format(str(inputfile)))
@@ -33,7 +32,6 @@ def read_structure(inputfile,filetype=''):
     if len(sr.st.atoms) == 0:
         print("No structure read from {:s}".format(inputfile))
         return False
-    sr.st.complete_self(wrap=False)
     return sr.st
 
 def conver_structure(struct_obj,obj_type='',**kwargs):
@@ -115,14 +113,22 @@ class StructureReader:
                     atom['occupancy'] = float(l[54:60].strip())
                 except ValueError:
                     pass
-
                 x = float(l[30:38].strip())
                 y = float(l[38:46].strip())
                 z = float(l[46:54].strip())
                 atom['elem'] = l[76:78].strip()
                 atom['coord'] = [x, y, z]
                 self.st.atoms.append(atom)
-        self.st.cell_param = param
+            if 'END' in l:
+                self.st.cell_param = param
+                self.st.complete_self()
+                self.st = self.st.new_frame()
+                self.st.basename = self.basename
+        self.st = self.st.frames[-2]
+        del self.st.frames[-1]
+
+
+
 
     def _read_cif(self):
         coord_flag = 0
@@ -517,8 +523,8 @@ class StructureReader:
     def _conver_mdanalysis(self):
         '''conver mdanalysis univeral object to structure object'''
         for ts in self.struct_obj.trajectory:
-            frame_sn = ts.frame + 1
-            self.st.choose_frame(frame_sn)
+            # frame_sn = ts.frame + 1
+            st=structure.Structure()
             cell_param = ts.dimensions
             atoms = []
             for a in self.struc_obj.atoms:
@@ -529,8 +535,12 @@ class StructureReader:
                 atom['resname'] = a.resname
                 atom['charge'] = a.charge
                 atoms.append(atom)
-            self.st.atoms = atoms
-            self.st.cell_param = cell_param
+            st.atoms = atoms
+            st.cell_param = cell_param
+            if len(self.st.atoms) == 0:
+                self.st = st
+            else:
+                self.st.append_frame(st)
 
 
     def _conver_graph(self, cell_param='',cell_vect=''):

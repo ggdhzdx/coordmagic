@@ -78,7 +78,7 @@ class TorsionFit:
         coords = []
         energies = []
         for k,v in st.frames.items():
-            st.choose_frame(k)
+            st=st.choose_frame(k)
             coords.append(st.coord)
             energies.append(float(st.comments[k-1].split()[0]))
         ref_energies = np.array(energies) - np.min(energies)

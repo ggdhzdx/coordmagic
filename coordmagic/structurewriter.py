@@ -4,48 +4,14 @@ import os
 import numpy as np
 from . import structurereader as sr
 
-def write_structure(st, name=None, append=False, ext='', **options):
+__all__ = [
+    'write_structure',
+    'StructureWriter'
+]
+
+def write_structure(st, name='', format='', frame='all', frame_idx=None, pad0=None, **options):
     sw = StructureWriter()
-    if type(st).__name__ == 'Structure':
-        sw.st = st
-    elif type(st).__name__ == 'Graph':
-        sw.st = sr.conver_structure(st,"graph")
-    else:
-        print("Error! You should either specify a structure object or a graph object in write_structure()")
-        sys.exit()
-    if not name:
-        name = sw.st.basename
-    if not ext:
-        name,ext = os.path.splitext(name)
-        if not ext:
-            ext='pdb'
-        else:
-            ext = ext[1:]
-    else:
-        name = name
-        ext = ext
-    sw.basename = name
-    filename = name + '.' + ext
-    if append:
-        print('Appending to file {:s}'.format(filename))
-        sw.file = open(filename, 'a')
-    else:
-        print('Generating file {:s}'.format(filename))
-        sw.file = open(filename, 'w')
-    # if ':' in options:
-    #     sw.options = defaultdict(str, {v.split(':')[0]: v.split(':')[1] for v in options.split(';')})
-    # else:
-        # sw.options = defaultdict(str)
-    sw.options = defaultdict(str,options)
-    if ext in sw.write_func:
-        sw.write_func[ext]()
-    else:
-        print('Format {:s} is not supported yet'.format(ext))
-        sys.exit()
-    sw.file.close()
-
-
-    # for atom in copy.d
+    sw.write_st(st, name=name, format=format, frame=frame, frame_idx=frame_idx, pad0=pad0, **options)
 
 class StructureWriter:
     def __init__(self):
@@ -57,9 +23,90 @@ class StructureWriter:
                            'cif': self._write_cif,
                            'xyz': self._write_xyz
                            }
+        self.multiframe_format=['xyz','pdb','mol2','gro']
         self.options=defaultdict(str)
+
+    def write_st(self, st, name='', format='', frame='all', frame_idx=None, pad0=None, **options):
+        """
+        st is a structure or graph object
+        name is the name of output file, if not defined will infer from the st.basename
+        format is the output file type, if not defined will infer form the name
+        if both name and format is specified the extension in name will not be considered as format
+        frame could be all/each/last/first which will all set frame_idx if frame_idx is not set
+        if frame is all but output format do not support traj, will auto switch to last and issue a warning
+
+        """
+
+        if type(st).__name__ == 'Structure':
+            self.st = st
+        elif type(st).__name__ == 'Graph':
+            self.st = sr.conver_structure(st,"graph")
+        else:
+            print("Error! You should either specify a structure object or a graph object in write_structure()")
+            sys.exit()
+        # determine which frame to save
+        self.frame=frame
+        if frame_idx is None:
+            if frame == 'all' or frame == 'each':
+                self.frame_idx = list(range(len(st.frames)))
+            elif frame == 'last':
+                self.frame_idx = [len(st.frames) - 1]
+            elif frame == 'first':
+                self.frame_idx = [0]
+            else:
+                self.frame_idx = [len(st.frames) - 1]
+        if not name:
+            name = st.basename
+        # determine output filename
+        ext=format
+        if not ext:
+            name,ext = os.path.splitext(name)
+            if ext == '':
+                print("Error!!! output file format not set, exit")
+            else:
+                ext = ext[1:]
+        if len(self.frame_idx) == 1:
+            self.basename = [name]
+        elif ext in self.multiframe_format and frame == 'all':
+            self.basename = [name]
+        elif ext not in self.multiframe_format and frame == 'all':
+            print("Warning!!! output format {:s} do not support multiframe format. Only last frame will output".format(ext))
+            self.basename = [name]
+            self.frame_idx=[len(st.frames) - 1]
+            self.frame = "last"
+        elif frame == 'each':
+            # multiframe
+            if pad0 is None:
+                pad0 = str(len(str(max(self.frame_idx))))
+            elif str(pad0).isdecimal():
+                pad0 = str(pad0)
+            elif pad0.startswith('+') and pad0[1:].isdecimal():
+                pad0 = str(len(str(max(self.frame_idx)))+int(pad0[1:]))
+            else:
+                print('Warning!!! Wrong format of pad0 parameter, will resort to default value')
+                pad0 = str(len(str(max(self.frame_idx))))
+            self.basename = []
+            for i in self.frame_idx:
+                self.basename.append(('{:s}_{:0'+pad0+'d}').format(name,i))
+        self.filename = [name + '.' + ext for name in self.basename]
+        self.options = defaultdict(str,options)
+        if ext in self.write_func:
+            if len(self.filename) == 1:
+                print("Writing: {:s} using frame: {:d}-{:d}/{:d}"
+                      .format(self.filename[0],self.frame_idx[0]+1,self.frame_idx[-1]+1,len(self.st.frames)))
+            else:
+                print("Writing: {:s} to {:s} using frame: {:d}-{:d}/{:d}"
+                      .format(self.filename[0],self.filename[-1],self.frame_idx[0]+1,self.frame_idx[-1]+1,len(self.st.frames)))
+            self.write_func[ext]()
+        else:
+            print('Format {:s} is not supported yet'.format(ext))
+            sys.exit()
+
     def fd(self, input, f=float, d=0.0):
-        '''fill default'''
+        """fill default
+        f is format
+        d is defatul value
+        """
         if input == '':
             input = f(d)
         return f(input)
@@ -92,26 +139,38 @@ class StructureWriter:
         self.file.write('END')
 
     def _write_pdb(self):
-        self.file.write('REMARK    Generated by Masagna\n')
-        if self.st.period_flag == 1:
-            self.file.write('CRYST1{:>9.3f}{:>9.3f}{:>9.3f}{:>7.2f}{:>7.2f}{:>7.2f} {:<11s}\n'
-                            .format(*(self.st.cell_param+['P1'])))
+        outf = open(self.filename[0], "w")
+        outf.write('REMARK Generated by coordmagic \n')
+        for n,idx in enumerate(self.frame_idx):
+            outf.write('{:6s}{:4s}{:4d}\n'.format('MODEL',"",n+1))
+            st=self.st.frames[idx]
+            if st._is_periodic == 1:
+                outf.write('CRYST1{:>9.3f}{:>9.3f}{:>9.3f}{:>7.2f}{:>7.2f}{:>7.2f} {:<11s}\n'
+                                .format(*(self.st.cell_param+['P1'])))
             scale = np.matrix(self.st.cell_vect).I.T.tolist()
             for i in range(1, 4):
-                self.file.write('SCALE{:<4d}{:>10.6f}{:>10.6f}{:>10.6f}{:5s}{:>10.5f}\n'
+                outf.write('SCALE{:<4d}{:>10.6f}{:>10.6f}{:>10.6f}{:5s}{:>10.5f}\n'
                                 .format(*([i]+scale[i-1]+[' ']+[0.0])))
-        atomname = self.st.getter('atomname')
-        if not all(atomname):
-            self.st.setter('atomname', self.st.elem)
-        for i, a in enumerate(self.st.atoms):
-            str1 = '{:<6s}{:>5d} {:<4s} {:3s} {:1s}{:>4d}    '\
-                   .format('ATOM', a['sn'], a['atomname'], a['resname'],
-                           a['chainid'], self.fd(a['resid'], f=int, d=1))
-            str2 = '{:>8.3f}{:>8.3f}{:>8.3f}'.format(*a['coord'])
-            str3 = '{:>6.2f}{:>6.2f}{:10s}'\
-                   .format(self.fd(a['occupancy'], d=1), self.fd(a['bfactor']), ' ')
-            str4 = '{:>2s}{:2s}\n'.format(a['elem'], a['formal_charge'])
-            self.file.write(str1+str2+str3+str4)
+            if not all(st.atomname):
+                st.gen_atomname()
+            for i, a in enumerate(st.atoms):
+                str1 = '{:<6s}{:>5d} {:<4s} {:3s} {:1s}{:>4d}    '\
+                       .format('ATOM', a['sn'], a['atomname'], a['resname'],
+                               a['chainid'], self.fd(a['resid'], f=int, d=1))
+                str2 = '{:>8.3f}{:>8.3f}{:>8.3f}'.format(*a['coord'])
+                str3 = '{:>6.2f}{:>6.2f}{:10s}'\
+                       .format(self.fd(a['occupancy'], d=1), self.fd(a['bfactor']), ' ')
+                str4 = '{:>2s}{:2s}\n'.format(a['elem'], a['formal_charge'])
+                outf.write(str1+str2+str3+str4)
+            outf.write('{:6s}\n'.format('ENDMDL'))
+            outf.close()
+            if  len(self.filename) == len(self.frame_idx) and n < len(self.filename)-1:
+                outf = open(self.filename[n+1],'w')
+                outf.write('REMARK Generated by coordmagic \n')
+            else:
+                outf = open(self.filename[0],'a')
+        outf.write('END\n')
+
 
     def _write_gro(self):
         atomname = self.st.getter('atomname')
@@ -243,23 +302,29 @@ class StructureWriter:
                 self.file.write(line)
 
     def _write_cif(self):
-        self.file.write('data_'+self.st.basename+'\n')
-        self.file.write('{:35s}{:.6f}\n'.format('_cell_length_a', self.st.cell_param[0]))
-        self.file.write('{:35s}{:.6f}\n'.format('_cell_length_b', self.st.cell_param[1]))
-        self.file.write('{:35s}{:.6f}\n'.format('_cell_length_c', self.st.cell_param[2]))
-        self.file.write('{:35s}{:.6f}\n'.format('_cell_angle_alpha', self.st.cell_param[3]))
-        self.file.write('{:35s}{:.6f}\n'.format('_cell_angle_beta', self.st.cell_param[4]))
-        self.file.write('{:35s}{:.6f}\n'.format('_cell_angle_gamma', self.st.cell_param[5]))
-        self.file.write('loop_\n'
-                      '_atom_site_label\n'
-                      '_atom_site_type_symbol\n'
-                      '_atom_site_fract_x\n'
-                      '_atom_site_fract_y\n'
-                      '_atom_site_fract_z\n')
-        atomname = self.st.getter('atomname')
-        if not all(atomname):
-            self.st.setter('atomname', self.st.elem)
-        for i, a in enumerate(self.st.atoms):
-            str1 = '{:7s}{:7s}'.format(a['atomname'], a['elem'])
-            str2 = '{:14.8f}{:14.8f}{:14.8f}'.format(*a['fcoord'])
-            self.file.write(str1+str2+'\n')
+
+        outf = open(self.filename[0], "w")
+        outf.write('data_'+self.st.basename+'\n')
+        for n,idx in enumerate(self.frame_idx):
+            st=self.st.frames[idx]
+            outf.write('{:35s}{:.6f}\n'.format('_cell_length_a', st.cell_param[0]))
+            outf.write('{:35s}{:.6f}\n'.format('_cell_length_b', st.cell_param[1]))
+            outf.write('{:35s}{:.6f}\n'.format('_cell_length_c', st.cell_param[2]))
+            outf.write('{:35s}{:.6f}\n'.format('_cell_angle_alpha', st.cell_param[3]))
+            outf.write('{:35s}{:.6f}\n'.format('_cell_angle_beta', st.cell_param[4]))
+            outf.write('{:35s}{:.6f}\n'.format('_cell_angle_gamma', st.cell_param[5]))
+            outf.write('loop_\n'
+                          '_atom_site_label\n'
+                          '_atom_site_type_symbol\n'
+                          '_atom_site_fract_x\n'
+                          '_atom_site_fract_y\n'
+                          '_atom_site_fract_z\n')
+            if not all(st.atomname):
+                st.gen_atomname()
+            for i, a in enumerate(st.atoms):
+                str1 = '{:7s}{:7s}'.format(a['atomname'], a['elem'])
+                str2 = '{:14.8f}{:14.8f}{:14.8f}'.format(*a['fcoord'])
+                outf.write(str1+str2+'\n')
+            outf.close()
+            if  n < len(self.filename)-1:
+                outf = open(self.filename[n+1],'w')

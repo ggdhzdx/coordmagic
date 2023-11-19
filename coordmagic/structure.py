@@ -1,10 +1,12 @@
+from typing import List, Union, Any
+
 import networkx as nx
 
 from .layer import Layer
 from .molgraph import MolGraph
 from .labelatom import LabelAtom
 from .cell import *
-from .structurewriter import StructureWriter
+from .structurewriter import *
 from .parameter import Parameter
 import copy
 import os
@@ -12,258 +14,367 @@ import sys
 import numpy as np
 from collections import defaultdict
 
+### todo
+# lazzy complete self
 
 
 class Structure:
 
-    def __init__(self, elem=[],atomnum=[],coord=[],fcoord=[],cell_vect=[],cell_param=[]):
+
+    def __init__(self, atoms: list=None, elem: list=None, atomnum: list=None, coord: list=None, fcoord: list=None, cell_vect: list=None, cell_param:list=None):
+        if atoms is None:
+            atoms = []
+        if cell_param is None:
+            cell_param = []
+        if cell_vect is None:
+            cell_vect = []
+        if fcoord is None:
+            fcoord = []
+        if coord is None:
+            coord = []
+        if elem is None:
+            elem = []
+        if atomnum is None:
+            atomnum = []
         self.basename = ''
-        self.atoms = []  # list of atom, each atom is a defaultdict object, this is a core property
-        self.period_flag = 0  # weather periodic structure
+        self.atoms = atoms  # list of atom, each atom is a defaultdict object, this is the core property
+        self._is_periodic = 0  # whether periodic structure
+        self._cell_vect = []
+        self._cell_param = []
         self.cell_vect = cell_vect
         self.cell_param = cell_param
         # following are properties extract from self.atoms in complete_self method
-        self.coord = coord
-        self.fcoord = fcoord
-        self.elem = elem
-        self.atomnum = atomnum
-        self.sn = []  # serial number of atoms. Duplicates indicate image atoms
+        # variable record for state change, used for lazy property calculation
+        self.__recalc_coord = 0
+        self.__recalc_fcoord = 0
         if len(self.atoms) == 0:
-            if len(self.elem) > 0:
-                self.atoms = [defaultdict(str,{'elem':i}) for i in self.elem]
+            if len(elem) > 0:
+                self.elem = elem
             elif len(self.atomnum) > 0:
-                self.atoms = [defaultdict(str,{'atomnum':int(i)}) for i in self.atomnum]
-        if len(self.coord) > 0:
-            self.setter('coord',self.coord)
-        if len(self.fcoord) > 0:
-            self.setter('fcoord',self.fcoord)
+                self.atomnum = atomnum
+        if len(coord) > 0:
+            self.coord = coord
+        elif len(fcoord) > 0:
+            self.fcoord = fcoord
         self.cell_origin = [0, 0, 0]
-        # frames is a defaultdict will contain multiple atom lists
-        self.frames = defaultdict(list,{1:self.atoms})
-        self.frames_box = defaultdict(list,{1:self.cell_param})
-        self.frame_sn = 1
+        # frames is a defaultdict will contain multiple structure object
+        self.frames = [self]
         # hidden properties
         self._sn2atom = {} # dictionary map atom sn to atom dict
         # following are groups of tools to  analysis structure
         #self.T = Transformer(self)
         #self.L = Layer(self)
-        self.P = Parameter() # store all constant like atom radius, vdw parameters...
+        self.param = Parameter() # store all constant like atom radius, vdw parameters...
         self.L = LabelAtom(self) # properties or descriptors that mapped to atom
         self.G = MolGraph(self)
         #self.MC = Cluster(self)
         #self.ML = label(self)
         #self.MM = Measurement(self)
-        self.molecules = []
-        self.graph = ''
-        self.supergraph = ''
-        self.mol_list = ''
+        # list of molecules contain in the structure, only available after graph analysis
+        self.molecules = None
+        self.graph = None
+        self.supergraph = None
+        self.mol_list = None
 
-    def choose_frame(self,n):
-        '''the number in different frames may be different
-        if n is not in self.frame then an empty structure
-        the complete_self will store atomslist and cellparam to frames and frames_box'''
-        if n < 0:
-            current_max = max(self.frames.keys())
-            n = current_max + 1 + n
-        self.frame_sn = n
-        self.atoms = self.frames[n]
-        if len(self.frames_box[n]) == 6:
-            self.cell_param = self.frames_box[n]
-        self.complete_self(reset_vect=False)
+    @property
+    def frame_idx(self):
+        return self.frames.index(self)
 
-    # def new_frame(self, n=0):
-    #     '''set current frame to new frame
-    #     the serial number of new frame is current max serial number plus one'''
-    #     current_max = max(self.frames.keys())
-    #     if n == 0:
-    #         n = current_max + 1
-    #     self.frames[self.frame_sn] = copy.deepcopy(self.frames[self.frame_sn])
-    #     if len(self.frames_box[self.frame_sn]) == 6:
-    #         self.frames_box[self.frame_sn] = copy.deepcopy(self.frames_box[self.frame_sn])
-    #     self.choose_frame(n)
+    def choose_frames(self, n: list):
+        """return a list of st object from self.frames dict
+        each st object has an updated frames attribute
+        """
+        new_frames = [self.frames[i] for i in n]
+        for st in new_frames:
+            st.frames=new_frames
+        return new_frames
 
-    def getter(self, prop_name):
-        '''get prop_name from all atoms and form a list
+    def append_frame(self, st, frame_idx: list=None):
+        """append another structure object st to the frame
+        if frames is None, append all frames in st,
+        else append frames specified by frame_idx such as [1,2,3,4] within st
+        """
+        if frame_idx is None:
+            appended_frames = st.frames
+        else:
+            appended_frames = [st[i] for i in frame_idx]
+        merged_frames = []
+        for fs in [self.frames, appended_frames]:
+            for f in fs:
+                f.frames = merged_frames
+                merged_frames.append(f)
+
+    def new_frame(self,st=None, atoms: list=None, elem: list=None, atomnum: list=None, coord: list=None, fcoord: list=None, cell_vect: list=None, cell_param:list=None):
+        if st is None:
+            st=Structure(atoms=atoms, elem=elem, atomnum=atomnum, coord=coord, fcoord=fcoord, cell_vect=cell_vect, cell_param=cell_param)
+        self.append_frame(st)
+        return self.frames[-1]
+
+    def del_frames(self, frame_idx=None):
+        if frame_idx is None:
+            frame_idx = []
+        for idx in sorted(frame_idx,reverse=True):
+            del self.frames[idx]
+
+    def concat_frame(self, st_list, self_pos=0 ):
+        """
+        concat all frames from st in st_list
+        and set update frames and frame_sn attribute in every st in st_list
+        and the st_list will be returned
+        if include_self is a number N, then the self will be put at N position in the st list
+        """
+        if self_pos in list(range(len(st_list))):
+            st_list.insert(self_pos,self)
+        merged_frames = []
+        for st in st_list:
+            for f in st.frames:
+                f.frames = merged_frames
+                merged_frames.append(f)
+        return st_list
+
+    def _getter(self, prop_name):
+        """
+        get prop_name from all atoms and form a list
         also set the structure attribute
-        '''
+        """
         prop = [atom[prop_name] for atom in self.atoms]
         return prop
 
-    def setter(self, prop_name, value):
-        '''set prop_name for all atoms with value'''
-        if len(value) < len(self.atoms) or isinstance(value, str):
-            prop_value = len(self.atoms) * [value]
-        elif len(value) == len(self.atoms):
-            prop_value = value
+    def _setter(self, prop_name, value: list):
+        """
+        set prop_name for all atoms in self.atoms with value
+        """
+        if len(value) == len(self.atoms):
+            for i, atom in enumerate(self.atoms):
+                atom[prop_name] = value[i]
         else:
-            print("Set {:s} for {:s} Error! More values({:d}) than atoms({:d})"
+            print("Set {:s} for {:s} Error! different number of values({:d}) from atoms({:d})"
                   .format(prop_name, self.basename, len(value), len(self.atoms)))
-        setattr(self, prop_name, prop_value)
-        for i, atom in enumerate(self.atoms):
-            atom[prop_name] = prop_value[i]
+            sys.exit()
 
-    def __str__(self):
-        if not self.formula:
-            return ''
-        if self.period_flag:
-            return (self.formula +
-            " in a={:.1f},b={:.1f},c={:.1f},alpha={:.1f},beta={:.1f},gamma={:.1f}".format(*self.cell_param))
-        else:
-            return (self.formula + ' in vacuum')
+    @property
+    def elem(self):
+        return self._getter('elem')
 
-    def complete_self(self, wrap=False, reset_vect=True):
-        '''re-Generate coords fcoords elems atomnums sn attribute from self.atoms
-        generate atomnum from elem or elem from atomnum
-        if both atomum or elem are missing, generate them from atomname
-        generate cell_param from cell_vect or cell_vect from cell_param
-        generate fcoord from coord or coord from fcoord
-        reset_vect = True means reset a to x axis and b in xy plane
-        wrap = True means move atoms outside cell inside. Cannot working when atoms with
-        duplicate sn exist (image atom).
-        '''
-        self.coord = self.getter('coord')
-        self.fcoord = self.getter('fcoord')
-        self.elem = self.getter('elem')
-        self.atomnum = self.getter('atomnum')
-        self.sn = self.getter('sn')
-        self.frames[self.frame_sn] = self.atoms
-        self.frames_box[self.frame_sn] = self.cell_param
-        self.frames = defaultdict(list,{k:v for k,v in self.frames.items() if len(v)>0})
-        self.frames_box = defaultdict(list,{k:v for k,v in self.frames_box.items() if len(v)>0})
+    @elem.setter
+    def elem(self, value):
+        self._setter('elem', value)
+        atomnum = [self.param.elem2an[i[0].upper() + i[1:].lower()] for i in value]
+        self._setter('atomnum', atomnum)
 
-        if not all(self.sn):
-            self.reset_sn()
+    @property
+    def atomnum(self):
+        return self._getter('atomnum')
 
-        if all(self.elem) and not all(self.atomnum):
-            self.elem2an()
-        elif all(self.atomnum) and not all(self.elem):
-            self.an2elem()
-        elif not all(self.elem) and not all(self.atomnum):
-            self.atomname = self.getter('atomname')
-            if all(self.atomname):
-                self.name2elem()
-                self.elem2an()
-            else:
-                print('no atoms found for {:s}'.format(self.basename))
+    @atomnum.setter
+    def atomnum(self, value):
+        self._setter('atomnum', value)
+        elem = [self.param.an2elem[int(i)] for i in value]
+        self._setter('elem', elem)
 
-        if len(self.cell_param) == 0 and len(self.cell_vect) == 0:
-            self.period_flag = 0
-        else:
-            self.period_flag = 1
-            if len(self.cell_vect) == 3 and len(self.cell_param) < 6:
-                self.vect2param()
-                self.frames_box[self.frame_sn] = self.cell_param
-            elif len(self.cell_param) == 6 and len(self.cell_vect) < 3:
-                self.param2vect()
-            elif len(self.cell_param) < 6 and len(self.cell_vect) < 3:
-                print('Cell_vect or cell_param is not right, the contents are:')
-                print(self.cell_param)
-                print(self.cell_vect)
-            if np.isnan(self.cell_param).any():
-                self.cell_param = []
-                self.cell_vect = []
-                self.period_flag = 0
-            else:
-                # fill empty coord
-                if reset_vect:
-                    self.param2vect()
-                if len(self.coord[0]) == 3 and len(self.fcoord[0]) == 0:
-                    self.cart2frac()
-                elif len(self.fcoord[0]) == 3 and len(self.coord[0]) == 0:
-                    self.frac2cart()
-                elif len(self.fcoord[0]) == 0 and len(self.coord[0]) == 0:
-                    print('no coordinates found')
-                if wrap and len(self.sn) == len(set(self.sn)):
-                    self.wrap_in_fcoord()
-                    self.frac2cart()
+    def _frac2cart(self):
+        """
+        update coord from fcoord for all atom in self.atoms
+        """
+        coord = np.matmul(np.array(self.fcoord), np.array(self.cell_vect))
+        coord = (coord +np.array(self.cell_origin)).tolist()
+        self._setter("coord",coord)
 
-    def reset_sn(self):
-        '''reset sn key in defaultdict by the order of atom in self.atoms list'''
-        new_sn = list(range(1, len(self.atoms)+1))
-        old_sn = self.getter('sn')
-        self.setter('sn', new_sn)
-        if self.graph:
-            mapping = {k:v for k,v in zip(old_sn,new_sn)}
-            nx.set_node_attributes(self.graph,mapping,'sn')
-            nx.relabel_nodes(self.graph,mapping)
+    def _cart2frac(self):
+        """
+        update fcoord from coord for all atom in self.atoms
+        """
+        coord = np.array(self.coord) - np.array(self.cell_origin)
+        fcoord = np.matmul(np.array(coord), np.linalg.inv(np.array(self.cell_vect))).tolist()
+        self._setter('fcoord', fcoord)
 
-    def elem2an(self):
-        atomnum = [self.P.elem2an[i[0].upper()+i[1:].lower()] for i in self.elem]
-        self.setter('atomnum', atomnum)
+    @property
+    def coord(self):
+        if self._is_periodic:
+            if self.__recalc_coord == 1:
+                self._frac2cart()
+                self.__recalc_coord = 0
+            elif any(not c for c in self._getter('coord')):
+                self._frac2cart()
+        return self._getter('coord')
 
-    def name2elem(self):
-        cleared_elems = []
-        for a in self.atomname:
-            elem = ''.join([i for i in a if not i.isdigit()])
-            elem = elem[0].upper()+elem[1:].lower()
-            if elem in self.P.elem2an:
-                cleared_elems.append(elem)
-            elif elem[0] in self.P.elem2an:
-                cleared_elems.append(elem[0])
-            else:
-                print('Error!!! atom name {:s} could not convert to element'.format(a))
-                sys.exit()
-        self.setter('elem', cleared_elems)
+    @coord.setter
+    def coord(self, value):
+        self._setter("coord",value)
+        self.__recalc_fcoord = 1
 
-    def an2elem(self):
-        elem = [self.P.an2elem[int(i)] for i in self.atomnum]
-        self.setter('elem', elem)
+    @property
+    def fcoord(self):
+        if self._is_periodic:
+            if self.__recalc_fcoord == 1:
+                self._cart2frac()
+                self.__recalc_fcoord = 0
+            elif any(not c for c in self._getter('fcoord')):
+                self._cart2frac()
+        return self._getter('fcoord')
 
-    def param2vect(self):
+    @fcoord.setter
+    def fcoord(self, value):
+        self._setter("fcoord",value)
+        self.__recalc_coord = 1
+
+    @property
+    def sn(self):
+        return self._getter('sn')
+
+    @property
+    def atomname(self):
+        return self._getter('atomname')
+
+    @atomname.setter
+    def atomname(self,value):
+        self._setter("atomname",value)
+
+    def _param2vect(self):
         a, b, c, alpha, beta, gamma = self.cell_param
         va = [a, 0.0, 0.0]
         vb = [b*np.cos(np.radians(gamma)), b*np.sin(np.radians(gamma)), 0.0]
-        angle2Y = np.arccos(np.cos(np.radians(alpha))*np.cos(np.pi/2-np.radians(gamma)))
         cx = c*np.cos(np.radians(beta))
-        cy = c*np.cos(angle2Y)
+        cy = c*np.cos(np.arccos(np.cos(np.radians(alpha))*np.cos(np.pi/1-np.radians(gamma))))
         cz = (c**2-cx**2-cy**2)**0.5
         vc = [cx, cy, cz]
-        self.cell_vect = [va, vb, vc]
+        self._cell_vect = [va, vb, vc]
 
-    def vect2param(self):
+    def _vect2param(self):
         va, vb, vc = self.cell_vect
         a = np.linalg.norm(va)
         b = np.linalg.norm(vb)
         c = np.linalg.norm(vc)
         if a == 0 or b == 0 or c == 0:
             print("Warning! One of the cell edge has zero length, the system will be considered as non periodic")
+            self._cell_param = []
+            return
         alpha = np.rad2deg(np.arccos(np.dot(vc, vb)/(c*b)))
         beta = np.rad2deg(np.arccos(np.dot(va, vc)/(a*c)))
         gamma = np.rad2deg(np.arccos(np.dot(va, vb)/(a*b)))
-        self.cell_param = [a, b, c, alpha, beta, gamma]
+        self._cell_param = [a, b, c, alpha, beta, gamma]
 
-    def wrap_in_fcoord(self):
-        for coord in self.fcoord:
-            for i in range(len(coord)):
-                if coord[i] < 0:
-                    coord[i] += np.ceil(abs(coord[i]))
-                if coord[i] >= 1:
-                    coord[i] -= np.floor(coord[i])
-        self.setter('fcoord', self.fcoord)
+    @property
+    def cell_param(self):
+        return self._cell_param
 
-    def frac2cart(self, fcoord = []):
-        if len(fcoord) > 0:
-            coord = np.matmul(np.array(fcoord), np.array(self.cell_vect))
-            coord = (coord +np.array(self.cell_origin)).tolist()
-            return coord
+    @cell_param.setter
+    def cell_param(self,value: list):
+        if len(value) == 0:
+            return
+        elif len(value) != 6:
+            print("Error! the format of cell_param should be [a,b,c,alpha,beta,gamma], but the input is:")
+            print(value)
+            sys.exit()
         else:
-            coord = np.matmul(np.array(self.fcoord), np.array(self.cell_vect))
-            coord = (coord +np.array(self.cell_origin)).tolist()
-            self.setter('coord', coord)
+            self._cell_param = list(value)
+            self._is_periodic = 1
+            self._param2vect()
 
-    def cart2frac(self,coord = []):
-        if len(coord) > 0:
-            coord = np.array(coord) - np.array(self.cell_origin)
-            fcoord = np.matmul(np.array(coord), np.linalg.inv(np.array(self.cell_vect))).tolist()
-            return fcoord
+    @property
+    def cell_vect(self):
+        return self._cell_vect
+
+    @cell_vect.setter
+    def cell_vect(self,value: list):
+        if len(value) == 0:
+            return
+        elif len(value) != 3:
+            print("Error! the shape of cell_vect should be 3 x 3, but the input is:")
+            print(value)
+            sys.exit()
         else:
-            coord = np.array(self.coord) - np.array(self.cell_origin)
-            fcoord = np.matmul(np.array(coord), np.linalg.inv(np.array(self.cell_vect))).tolist()
-            self.setter('fcoord', fcoord)
+            for v in value:
+                if len(v) != 3:
+                    print("Error! the shape of cell_vect should be 3 x 3, but the input is:")
+                    print(value)
+                    sys.exit()
+            self._cell_vect = list(value)
+            self._is_periodic = 1
+            self._vect2param()
+
+    def _name2elem(self):
+        cleared_elems = []
+        a: str
+        for a in self.atomname:
+            elem = ''.join([i for i in a if not i.isdigit()])
+            elem = elem[0].upper()+elem[1:].lower()
+            if elem in self.param.elem2an:
+                cleared_elems.append(elem)
+            elif elem[0] in self.param.elem2an:
+                cleared_elems.append(elem[0])
+            else:
+                print('Error!!! atom name {:s} could not convert to element'.format(a))
+                sys.exit()
+        self._setter('elem', cleared_elems)
+
+    def gen_atomname(self):
+        element_counts = dict()
+        names = []
+        element: str
+        for element in self.elem:
+            if element not in element_counts:
+                element_counts[element] = 1
+            else:
+                element_counts[element] += 1
+            names.append("{:s}{:d}".format(element, element_counts[element]))
+        self.atomname = names
+
+    def complete_self(self, reset_vect=True):
+        """
+        Generate sn from order of atom in self.atoms, if sn is not all avail
+        if both atomnum or elem are missing, generate them from atomname
+        reset_vect = True means reset a to x axis and b in xy plane
+        """
+        if not all(self.sn):
+            self.reset_sn()
+        if not all(self.elem) and not all(self.atomnum):
+            if all(self.atomname):
+                self._name2elem()
+            else:
+                print('no atoms found for {:s}'.format(self.basename))
+                # fill empty coord
+        if self._is_periodic == 1:
+            if reset_vect:
+                self._param2vect()
+            allc = all(len(c) == 3 for c in self.coord)
+            allf = all(len(c) == 3 for c in self.fcoord)
+            if allc and not allf:
+                self._cart2frac()
+            elif allf and not allc:
+                self._frac2cart()
+            elif not allf and not allc:
+                print("Warning!!! something wrong in coord or fcoord")
+
+    def reset_sn(self):
+        """reset sn key in defaultdict by the order of atom in self.atoms list
+        @rtype: None
+        """
+        new_sn = list(range(1, len(self.atoms)+1))
+        old_sn = self._getter('sn')
+        self._setter('sn', new_sn)
+        if self.graph:
+            mapping = {k:v for k,v in zip(old_sn,new_sn)}
+            nx.set_node_attributes(self.graph,mapping,'sn')
+            nx.relabel_nodes(self.graph,mapping)
+
+    def wrap_in(self):
+        if len(self.sn) == len(set(self.sn)):
+            print("Error! You should not wrap atoms while there are image atoms")
+            sys.exit()
+        fc = self.fcoord
+        c: list
+        for c in fc:
+            for i in range(len(c)):
+                if c[i] < 0:
+                    c[i] += np.ceil(abs(c[i]))
+                if c[i] >= 1:
+                    c[i] -= np.floor(c[i])
+        self.fcoord = fc
 
     def add_atom(self, atom):
-        '''add a single atom
-        atom is a default dict object'''
+        """add a single atom which
+        is a default dict object"""
         s = copy.copy(self)
         s.atoms.append(atom)
         if atom['sn'] == '':
@@ -272,26 +383,26 @@ class Structure:
         return s
 
     def remove_atom(self, sn, reset_sn=False):
-        '''idx is a list of atom sn '''
+        """idx is a list of atom sn """
         s = copy.copy(self)
         s.atoms = [i for i in s.atoms if i['sn'] not in list(sn)]
         s.complete_self()
-        if reset_sn == True:
+        if reset_sn:
             s.reset_sn()
         return s
 
     def add_struc(self, struc, reset_sn=False):
-        '''add structure object to the  structure
-        the cell_param in structure object will be omitted'''
+        """add structure object to the  structure
+        the cell_param in structure object will be omitted"""
         s = copy.copy(self)
         s.atoms = s.atoms + struc.atoms
         s.complete_self()
-        if reset_sn == True:
+        if reset_sn:
             s.reset_sn()
         return s
 
     def extract_struc(self, sn, reset_sn=False):
-        '''sn is a list of atom sn '''
+        """sn is a list of atom sn """
         s = Structure()
         s.atoms = copy.deepcopy([i for i in self.atoms if i['sn'] in sn])
         s.cell_vect = self.cell_vect
@@ -299,21 +410,20 @@ class Structure:
         s.complete_self()
         if self.graph:
             s.graph = copy.deepcopy(nx.subgraph(self.graph,sn).copy())
-        if reset_sn == True:
+        if reset_sn:
             s.reset_sn()
         return s
 
     def get_atom_by(self,**kwargs ):
-        '''get a list of atom by key value pair
-        where key is an atom property and value is a list'''
+        """get a list of atom by key value pair
+        where key is an atom property and value is a list"""
         atoms = []
         for key,value in kwargs.items():
             atoms += [i for i in self.atoms if i[key] in value]
         return atoms
 
     def get_atom(self,sn,reset_dict=False):
-        '''get a list of atom by key value pair
-        where key is an atom property and value is a list'''
+        """get a list of atoms by sn"""
         if reset_dict:
             self._sn2atom = {i['sn']:i for i in self.atoms}
         try:
@@ -323,39 +433,22 @@ class Structure:
             atoms = [self._sn2atom[i] for i in sn]
         return atoms
 
+    def save(self, name=None, format=None, frame='all', frame_idx=None, pad0=None, **options):
+        StructureWriter().write_st(self, name=name, format=format, frame=frame, frame_idx=frame_idx, pad0=pad0, **options)
 
-    def write_structure(self, basename=None, append=False, ext='', options=''):
-        sw = StructureWriter()
-        sw.st = self
-        if not basename:
-            basename = sw.st.basename
-        if not ext:
-            basename, ext = os.path.splitext(basename)
-            if not ext:
-                ext = 'pdb'
-            else:
-                ext = ext[1:]
+
+    def __str__(self):
+        if self.formula == "":
+            formula = "empty structure"
         else:
-            basename = basename
-            ext = ext
-        sw.basename = basename
-        filename = basename + '.' + ext
-        if append:
-            print('Appending to file {:s}'.format(filename))
-            sw.file = open(filename, 'a')
+            formula = self.formula
+        if self._is_periodic:
+            cell_info = " in a={:.1f},b={:.1f},c={:.1f},alpha={:.1f},beta={:.1f},gamma={:.1f}".format(*self.cell_param)
         else:
-            print('Generating file {:s}'.format(filename))
-            sw.file = open(filename, 'w')
-        if ':' in options:
-            sw.options = defaultdict(str, {v.split(':')[0]: v.split(':')[1] for v in options.split(';')})
-        else:
-            sw.options = defaultdict(str)
-        if ext in sw.write_func:
-            sw.write_func[ext]()
-        else:
-            print('Format {:s} is not supported yet'.format(ext))
-            sys.exit()
-        sw.file.close()
+            cell_info = ' in vacuum'
+        frame_info = "; frames: {:d}/{:d}".format(self.frame_idx+1,len(self.frames))
+        return formula + cell_info + frame_info
+
 
     @property
     def thick(self):
@@ -375,7 +468,7 @@ class Structure:
 
     @property
     def mass_center(self):
-        weights = np.array([self.P.elem2mass[x] for x in self.elem])
+        weights = np.array([self.param.elem2mass[x] for x in self.elem])
         center_of_mass = np.average(np.array(self.coord), axis=0, weights=weights)
         return center_of_mass
 
@@ -384,7 +477,7 @@ class Structure:
         coord = np.array(self.coord) - self.mass_center
         Ixx,Iyy,Izz,Ixy,Ixz,Iyz = [0,0,0,0,0,0]
         for i,c in enumerate(coord):
-            m = self.P.elem2mass[self.elem[i]]
+            m = self.param.elem2mass[self.elem[i]]
             x,y,z = c
             Ixx += m * (y**2 + z**2)
             Iyy += m * (x**2 + z**2)
@@ -393,10 +486,11 @@ class Structure:
             Ixz += -1 * m * x * z
             Iyz += -1 * m * y * z
         return np.array([[Ixx, Ixy, Ixz], [Ixy, Iyy, Iyz], [Ixz, Iyz, Izz]])
+
     @property
-    def principal_inertia_axis(self):
-        '''retrun  array of principle inertia axis
-        ranged from large eigen_val (moment of inertia) to small eigen_val'''
+    def principal_inertia_axis(self) -> np.ndarray:
+        """retrun  array of principle inertia axis
+        ranged from large eigen_val (moment of inertia) to small eigen_val"""
         eigval, eigvec = np.linalg.eig(self.inertia_tensor)
         sort = np.argsort(eigval)[::-1]
         eigvec = eigvec[:,sort].T
@@ -404,10 +498,11 @@ class Structure:
         if np.dot(np.cross(eigvec[0], eigvec[1]), eigvec[2]) < 0:
             eigvec *= -1
         return eigvec
+
     @property
     def principal_geom_axis(self):
-        '''retrun array of geometry axis from svd on coords
-        ranged from long axis to short axis'''
+        """return array of geometry axis from svd on coords
+        ranged from long axis to short axis"""
         coord = np.array(self.coord) - self.geom_center
         u,s,vh  = np.linalg.svd(coord)
         return vh
@@ -438,7 +533,7 @@ class Structure:
     def formula(self):
         # generate formula in cell
         c = [[c, self.elem.count(c)] for c in set(self.elem)]
-        sc = sorted(c, key=lambda x: self.P.elem2an[x[0]], reverse=True)
+        sc = sorted(c, key=lambda x: self.param.elem2an[x[0]], reverse=True)
         formula = ''.join([i[0]+str(i[1]) for i in sc])
         return formula
 
@@ -453,6 +548,6 @@ class Structure:
             indexes.sort(key=self.atomnum.__getitem__)
         s.atoms = list(map(self.atoms.__getitem__, indexes))
         s.complete_self()
-        if reset_sn == True:
+        if reset_sn:
             s.reset_sn()
         return s

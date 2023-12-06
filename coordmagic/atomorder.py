@@ -38,7 +38,7 @@ def sort_atom_by_sn(struct,sn_list):
     '''sort atoms in struct by sn list and return a new structure'''
     s = copy.deepcopy(struct)
     s.atoms = [s.atoms[i-1] for i in sn_list]
-    s.complete_self()
+    s.complete_coord()
     s.reset_sn()
     return s
 
@@ -48,7 +48,7 @@ def sort_atom_by_mol(struct):
     and the order of mol is not controlled
     '''
     if len(struct.molecules) == 0:
-        struct.G.gen_mol()
+        struct.graph.gen_mol()
     newsn = []
     for id, mol in struct.molecules.items():
         newsn += mol['sn']

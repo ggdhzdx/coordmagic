@@ -178,7 +178,7 @@ class ParamRefine:
         st = cm.conver_structure(self.ps,'parmed')
         print('Generating target graph ... ',end="",flush=True)
         start = timeit.default_timer()
-        st.G.gen_mol()
+        st.graph.gen_mol()
         end = timeit.default_timer()
         print('Graph generation took {:.3f} seconds'.format(end-start))
         # compute graph match time

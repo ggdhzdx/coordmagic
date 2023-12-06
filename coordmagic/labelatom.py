@@ -38,7 +38,7 @@ class LabelAtom:
         frag_rules = {'conjugate':self.label_by_conjugation,
                       'cycle':self.label_by_cycle}
         if len(self.S.molecules) < 1:
-            self.S.G.gen_mol()
+            self.S.graph.gen_mol()
         hash2frag = {}
         info_printed = []
         if onebyone == True:

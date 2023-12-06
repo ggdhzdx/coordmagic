@@ -38,7 +38,7 @@ class TorsionFit:
         paramrefine.adj_dihedral(contract='none')
         self.ps = paramrefine.ps
         self.st = cm.conver_structure(self.ps, 'parmed')
-        self.st.G.gen_mol()
+        self.st.graph.gen_mol()
         # print(self.st.molecules[2])
         if len(self.st.molecules) > 1:
             print('Error!!! More than one molecule detected in the input file')

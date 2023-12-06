@@ -182,7 +182,7 @@ class Cluster:
         #         atom['fcoord'] = np.array(atom['fcoord']) +  np.array(id2pos[molid])
         #         atom['coord'] = self.S.frac2cart(atom['fcoord'])
         #         st.atoms.append(atom)
-        # st.complete_self(wrap=False)
+        # st.complete_coord(wrap=False)
         # writer=StructureWriter()
         # writer.write_file(st,name,ext='mol2')
 
@@ -299,7 +299,7 @@ class Cluster:
         #     for atom in s.get_atom(f['sn']):
         #         atom['fcoord'] = np.array(atom['fcoord']) +  np.array(f['pos'])
         #         atom['coord'] = self.S.frac2cart(atom['fcoord'])
-        # s.complete_self(wrap=False)
+        # s.complete_coord(wrap=False)
         # return s
         # sw=StructureWriter()
     # sw.write_file(self.S,"test",ext='mol2')

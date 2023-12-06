@@ -108,7 +108,7 @@ class MolGraph:
             st.period_flag = 0
         for sn in sorted(list(graph.nodes())):
             st.atoms.append(defaultdict(str,graph.nodes[sn]))
-            st.complete_self(wrap=False)
+            st.complete_coord()
         return  st
             # for atom in copy.deepcop
 
@@ -120,7 +120,7 @@ class MolGraph:
         boundary. Inter atom distance smaller than edge_dist_th will be designate as an edge
         the self.S.graph properties will be generated
         '''
-        if self.S.period_flag:
+        if self.S._is_periodic:
             s = add_image_atom(self.S, expand_length)
         else:
             s = self.S
@@ -130,7 +130,10 @@ class MolGraph:
         G = nx.from_scipy_sparse_array(dist_mat)
         mapping = {i:j['sn'] for i,j in enumerate(s.atoms)}
         G = nx.relabel_nodes(G, mapping, copy=True)
-        nx.set_node_attributes(G,{i['sn']:i for i in self.S.atoms})
+        # change to referenct and not copy of atom dict
+        for node in G.nodes:
+            G.nodes[node].update({i['sn']:i for i in self.S.atoms}[node])
+        #nx.set_node_attributes(G,{i['sn']:i for i in self.S.atoms})
         G.n2formular = n2formula
         self.S.graph = G
         self.edge_dist_th=edge_dist_th
@@ -460,7 +463,7 @@ class MolGraph:
         #     for atom in s.get_atom(f['sn']):
         #         atom['fcoord'] = np.array(atom['fcoord']) +  np.array(f['pos'])
         #         atom['coord'] = self.S.frac2cart(atom['fcoord'])
-        # s.complete_self(wrap=False)
+        # s.complete_coord(wrap=False)
         # return s
         # sw=StructureWriter()
         # sw.write_file(self.S,"test",ext='mol2')

@@ -522,7 +522,7 @@ def cap_with(frag,elem='F',capfrag=''):
     subG = G.subgraph(list(frag['sn']) + cap_sn).copy()
     nx.set_node_attributes(subG, {i['sn']: i for i in cap_atoms})
     st = conver_structure(subG,'graph')
-    st.complete_self()
+    st.complete_coord()
     st.graph = subG
     return st
 

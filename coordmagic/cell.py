@@ -94,7 +94,7 @@ def super_cell(struct, trans_mat):
     slat.cell_vect = (np.matrix(trans_mat)*np.matrix(s.cell_vect)).tolist()
     slat.setter('fcoord', (np.matrix(all_frac)*np.matrix(trans_mat).I).tolist())
     slat.reset_sn()
-    slat.complete_self(reset_vect=False)
+    slat.complete_coord(reset_vect=False)
     slat.prim_cell_param = s.cell_param
     slat.prim_cell_vect = s.cell_vect
     slat.trans_mat = trans_mat
@@ -106,7 +106,7 @@ def add_image_atom(struct, expand_length):
     the origin cell. It can be one number or a list of three numbers.
     '''
     s = copy.deepcopy(struct)
-    s.wrap_in_fcoord()
+    s.wrap_in()
     def angle(a, b, c):
         '''calculate angle between a and norm of bc plane'''
         d = np.cross(b, c)
@@ -129,18 +129,13 @@ def add_image_atom(struct, expand_length):
                     new_f = np.array(f) + np.array([a, b, c])
                     if (all(new_f > iparam*-1) and all(new_f < iparam+1)  # within expaned cell
                             and (any(new_f < 0) or any(new_f >= 1))):  # not in origin cell
-                        ifrac.append(new_f.tolist())
-                        iatoms.append(s.atoms[i])
-                        isn.append(s.atoms[i]['sn'])
-    icart = np.matmul(np.array(ifrac),np.array(s.cell_vect))
-    icart = (icart+np.array(s.cell_origin)).tolist()
+                        ia = copy.deepcopy(s.atoms[i])
+                        ia['fcoord'] = new_f.tolist()
+                        iatoms.append(ia)
+    #icart = np.matmul(np.array(ifrac),np.array(s.cell_vect))
+    #icart = (icart+np.array(s.cell_origin)).tolist()
     s.atoms = s.atoms + iatoms
-    s.setter('fcoord', s.fcoord+ifrac)
-    s.setter('sn', s.sn+isn)
-    s.setter('coord', s.coord+icart)
-    s.elem = s.getter('elem')
-    s.atomnum = s.getter('atomnum')
-
+    s._frac2cart()
     # for i,e in enumerate(s.atoms):
     #     if i+1!=e['sn']:
     #         print(i,e['sn'])

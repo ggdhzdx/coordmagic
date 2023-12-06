@@ -42,7 +42,7 @@ def conver_structure(struct_obj,obj_type='',**kwargs):
         sr.read_func[obj_type](**kwargs)
     else:
         exit("Error!!! object type {:s} not supported to convert to cm structure".format(obj_type))
-    sr.st.complete_self()
+    sr.st.complete_coord()
     return sr.st
 
 
@@ -121,7 +121,7 @@ class StructureReader:
                 self.st.atoms.append(atom)
             if 'END' in l:
                 self.st.cell_param = param
-                self.st.complete_self()
+                self.st.complete_coord()
                 self.st = self.st.new_frame()
                 self.st.basename = self.basename
         self.st = self.st.frames[-2]
@@ -169,7 +169,6 @@ class StructureReader:
                 if 'fract_z' in line:
                     fz_idx = index
                 index = index + 1
-
             if re.search(r'-?\d+\.\d+\s+-?\d+\.\d+\s+-?\d+.\d+\s+', line) and coord_flag == 1:
                 atom = defaultdict(str)
                 fx = float(line.split()[fx_idx])
@@ -182,6 +181,7 @@ class StructureReader:
                     atom['atomname'] = line.split()[name_idx]
                 atom['fcoord'] = coord
                 self.st.atoms.append(atom)
+                self.st.reset_sn()
         self.st.cell_param = [a, b, c, alpha, beta, gamma]
 
     def _read_xsf(self):
@@ -368,13 +368,15 @@ class StructureReader:
         else:
             all_atoms = []
         if len(all_atoms) >= 1:
-            for i in range(len(all_atoms)-1):
+            for atoms in all_atoms:
                 self.st.atoms = atoms
-                self.st.complete_self()
-                self.st.choose_frame(self.st.frame_sn+1)
-            self.st.atoms = all_atoms[-1]
+                self.st.complete_coord()
+                self.st = self.st.new_frame()
+                self.st.basename = self.basename
         else:
             self.st.atoms = []
+        self.st = self.st.frames[-2]
+        del self.st.frames[-1]
         self.st.energies = energies
         self.st.ex_energies = ex_energies
 
@@ -486,7 +488,7 @@ class StructureReader:
                 read_coord = 1
                 if len(atoms) == int(l):
                     self.st.atoms = atoms
-                    self.st.complete_self()
+                    self.st.complete_coord()
                     self.st.choose_frame(self.st.frame_sn+1)
                     atoms = []
                 continue
@@ -500,7 +502,7 @@ class StructureReader:
                 atom['coord'] = [float(i) for i in x[1:]]
                 atoms.append(atom)
         self.st.atoms = atoms
-        self.st.complete_self()
+        self.st.complete_coord()
         self.st.comments = comments
 
     def _conver_parmed(self):
@@ -517,7 +519,7 @@ class StructureReader:
         # print(self.st.atoms)
         if self.struct_obj.box is not None:
             self.st.cell_param = self.struct_obj.box
-        self.st.complete_self()
+        self.st.complete_coord()
 
 
     def _conver_mdanalysis(self):
@@ -560,7 +562,7 @@ class StructureReader:
             self.st.period_flag = 0
         for sn in sorted(list(self.struct_obj.nodes())):
             self.st.atoms.append(defaultdict(str,self.struct_obj.nodes[sn]))
-            self.st.complete_self(wrap=False)
+            self.st.complete_coord(wrap=False)
 
     def _conver_xyz(self, cell_param='',cell_vect='',islist=False, delimit=None,frac_coord=False):
         '''generate structure object from string in the form:
@@ -600,7 +602,7 @@ class StructureReader:
                 atom['coord'] = [float(i) for i in [x,y,z]]
             atoms.append(atom)
         self.st.atoms = atoms
-        self.st.complete_self(wrap=False)
+        self.st.complete_coord(wrap=False)
 
 
 

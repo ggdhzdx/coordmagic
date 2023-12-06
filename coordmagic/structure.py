@@ -37,13 +37,13 @@ class Structure:
         if atomnum is None:
             atomnum = []
         self.basename = ''
-        self.atoms = atoms  # list of atom, each atom is a defaultdict object, this is the core property
+        self._atoms = atoms  # list of atom, each atom is a defaultdict object, this is the core property
         self._is_periodic = 0  # whether periodic structure
         self._cell_vect = []
         self._cell_param = []
         self.cell_vect = cell_vect
         self.cell_param = cell_param
-        # following are properties extract from self.atoms in complete_self method
+        # following are properties extract from self.atoms in complete_coord method
         # variable record for state change, used for lazy property calculation
         self.__recalc_coord = 0
         self.__recalc_fcoord = 0
@@ -75,6 +75,7 @@ class Structure:
         self.graph = None
         self.supergraph = None
         self.mol_list = None
+
 
     @property
     def frame_idx(self):
@@ -144,13 +145,35 @@ class Structure:
         """
         set prop_name for all atoms in self.atoms with value
         """
-        if len(value) == len(self.atoms):
-            for i, atom in enumerate(self.atoms):
+        if len(value) == len(self._atoms):
+            for i, atom in enumerate(self._atoms):
                 atom[prop_name] = value[i]
         else:
             print("Set {:s} for {:s} Error! different number of values({:d}) from atoms({:d})"
                   .format(prop_name, self.basename, len(value), len(self.atoms)))
             sys.exit()
+
+    @property
+    def atoms(self):
+        return self._atoms
+
+    @atoms.setter
+    def atoms(self, atoms:list):
+        self._atoms = atoms
+        if any(a['sn'] == '' for a in self._atoms):
+            self.reset_sn()
+        need_elem = any(a['elem'] == '' for a in self._atoms)
+        need_atomnum = any(a['atomnum'] == '' for a in self._atoms)
+        if need_elem and not need_atomnum:
+            for a in self._atoms:
+                a['elem'] = self.param.an2elem[int(a['atomnum'])]
+        elif need_atomnum and not need_elem:
+            for a in self._atoms:
+                a['atomnum'] = self.param.elem2an[a['elem']]
+        else:
+            need_atomname = any(a['atomname'] == '' for a in self._atoms)
+            if not need_atomname:
+                self._name2elem()
 
     @property
     def elem(self):
@@ -179,6 +202,7 @@ class Structure:
         coord = np.matmul(np.array(self.fcoord), np.array(self.cell_vect))
         coord = (coord +np.array(self.cell_origin)).tolist()
         self._setter("coord",coord)
+        self.__recalc_coord == 0
 
     def _cart2frac(self):
         """
@@ -187,13 +211,14 @@ class Structure:
         coord = np.array(self.coord) - np.array(self.cell_origin)
         fcoord = np.matmul(np.array(coord), np.linalg.inv(np.array(self.cell_vect))).tolist()
         self._setter('fcoord', fcoord)
+        self.__recalc_fcoord == 0
+
 
     @property
     def coord(self):
         if self._is_periodic:
             if self.__recalc_coord == 1:
                 self._frac2cart()
-                self.__recalc_coord = 0
             elif any(not c for c in self._getter('coord')):
                 self._frac2cart()
         return self._getter('coord')
@@ -208,7 +233,6 @@ class Structure:
         if self._is_periodic:
             if self.__recalc_fcoord == 1:
                 self._cart2frac()
-                self.__recalc_fcoord = 0
             elif any(not c for c in self._getter('fcoord')):
                 self._cart2frac()
         return self._getter('fcoord')
@@ -306,7 +330,7 @@ class Structure:
             else:
                 print('Error!!! atom name {:s} could not convert to element'.format(a))
                 sys.exit()
-        self._setter('elem', cleared_elems)
+        self.elem=cleared_elems
 
     def gen_atomname(self):
         element_counts = dict()
@@ -320,28 +344,18 @@ class Structure:
             names.append("{:s}{:d}".format(element, element_counts[element]))
         self.atomname = names
 
-    def complete_self(self, reset_vect=True):
+    def complete_coord(self, reset_vect=True):
         """
-        Generate sn from order of atom in self.atoms, if sn is not all avail
-        if both atomnum or elem are missing, generate them from atomname
         reset_vect = True means reset a to x axis and b in xy plane
         """
-        if not all(self.sn):
-            self.reset_sn()
-        if not all(self.elem) and not all(self.atomnum):
-            if all(self.atomname):
-                self._name2elem()
-            else:
-                print('no atoms found for {:s}'.format(self.basename))
-                # fill empty coord
         if self._is_periodic == 1:
             if reset_vect:
                 self._param2vect()
             allc = all(len(c) == 3 for c in self.coord)
             allf = all(len(c) == 3 for c in self.fcoord)
-            if allc and not allf:
+            if allc and not allf or self.__recalc_fcoord == 1:
                 self._cart2frac()
-            elif allf and not allc:
+            elif allf and not allc or self.__recalc_coord == 1:
                 self._frac2cart()
             elif not allf and not allc:
                 print("Warning!!! something wrong in coord or fcoord")
@@ -359,7 +373,7 @@ class Structure:
             nx.relabel_nodes(self.graph,mapping)
 
     def wrap_in(self):
-        if len(self.sn) == len(set(self.sn)):
+        if len(self.sn) != len(set(self.sn)):
             print("Error! You should not wrap atoms while there are image atoms")
             sys.exit()
         fc = self.fcoord
@@ -379,14 +393,14 @@ class Structure:
         s.atoms.append(atom)
         if atom['sn'] == '':
             atom['sn'] = max(s.sn) + 1
-        s.complete_self()
+        s.complete_coord()
         return s
 
     def remove_atom(self, sn, reset_sn=False):
         """idx is a list of atom sn """
         s = copy.copy(self)
         s.atoms = [i for i in s.atoms if i['sn'] not in list(sn)]
-        s.complete_self()
+        s.complete_coord()
         if reset_sn:
             s.reset_sn()
         return s
@@ -396,7 +410,7 @@ class Structure:
         the cell_param in structure object will be omitted"""
         s = copy.copy(self)
         s.atoms = s.atoms + struc.atoms
-        s.complete_self()
+        s.complete_coord()
         if reset_sn:
             s.reset_sn()
         return s
@@ -407,7 +421,7 @@ class Structure:
         s.atoms = copy.deepcopy([i for i in self.atoms if i['sn'] in sn])
         s.cell_vect = self.cell_vect
         s.cell_param = self.cell_param
-        s.complete_self()
+        s.complete_coord()
         if self.graph:
             s.graph = copy.deepcopy(nx.subgraph(self.graph,sn).copy())
         if reset_sn:
@@ -547,7 +561,7 @@ class Structure:
         if by == 'an':
             indexes.sort(key=self.atomnum.__getitem__)
         s.atoms = list(map(self.atoms.__getitem__, indexes))
-        s.complete_self()
+        s.complete_coord()
         if reset_sn:
             s.reset_sn()
         return s

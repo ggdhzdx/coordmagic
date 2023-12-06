@@ -46,7 +46,7 @@ class Layer:
         s.atoms = []
         for i in layer_idx:
             s.atoms = s.atoms + self.S.layers[i].atoms
-        s.complete_self()
+        s.complete_coord()
         return s
 
     def check_layer(self, z_th=0.2, a_th=5, bw=0.2, adist=True):

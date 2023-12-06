@@ -92,8 +92,8 @@ class Fragment:
         st = cm.conver_structure(coord,obj_type='xyz',islist=True)
         if fragset:
             fragset_dict = {i.split(':')[0]:i.split(':')[1] for i in fragset.split(';')}
-            st.G.set_threshold(**fragset_dict)
-        st.G.gen_mol(silent=True)
+            st.graph.set_threshold(**fragset_dict)
+        st.graph.gen_mol(silent=True)
         self.frag2idx = {}
         self.st = st
         self.df = self.st.mol_df[["id","type_id","formula",'sn_range']]

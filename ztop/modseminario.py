@@ -92,8 +92,8 @@ class ModSeminario:
     def gen_internal_coords(self, measure=True):
         '''This function extracts a list of bond and angles from the Gaussian .log file'''
         st = cm.read_structure(self.struct_file)
-        st.G.gen_mol()
-        st.G.gen_internal_coords(measure = measure)
+        st.graph.gen_mol()
+        st.graph.gen_internal_coords(measure = measure)
         self.st= st
         self.natom = len(self.st.atoms)
         self.coords = np.array(st.coord)

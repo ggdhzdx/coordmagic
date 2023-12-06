@@ -147,9 +147,9 @@ class StructureWriter:
             if st._is_periodic == 1:
                 outf.write('CRYST1{:>9.3f}{:>9.3f}{:>9.3f}{:>7.2f}{:>7.2f}{:>7.2f} {:<11s}\n'
                                 .format(*(self.st.cell_param+['P1'])))
-            scale = np.matrix(self.st.cell_vect).I.T.tolist()
-            for i in range(1, 4):
-                outf.write('SCALE{:<4d}{:>10.6f}{:>10.6f}{:>10.6f}{:5s}{:>10.5f}\n'
+                scale = np.matrix(self.st.cell_vect).I.T.tolist()
+                for i in range(1, 4):
+                    outf.write('SCALE{:<4d}{:>10.6f}{:>10.6f}{:>10.6f}{:5s}{:>10.5f}\n'
                                 .format(*([i]+scale[i-1]+[' ']+[0.0])))
             if not all(st.atomname):
                 st.gen_atomname()
@@ -226,9 +226,9 @@ class StructureWriter:
             self.file.write(line)
         if self.options['connection']:
             if len(self.st.molecules) == 0:
-                self.st.G.gen_mol()
-                self.st.G.gen_internal_coords()
-                self.st.G.gen_bond_order()
+                self.st.graph.gen_mol()
+                self.st.graph.gen_internal_coords()
+                self.st.graph.gen_bond_order()
             self.file.write('@<TRIPOS>BOND\n')
             for  i,b in enumerate(self.st.bonds.items()):
                 bondtype = b[1]['bond_order']
@@ -307,6 +307,10 @@ class StructureWriter:
         outf.write('data_'+self.st.basename+'\n')
         for n,idx in enumerate(self.frame_idx):
             st=self.st.frames[idx]
+            outf.write('_symmetry_space_group_name_H-M    \'P1\'\n')
+            outf.write('_symmetry_Int_Tables_number       1\n')
+            outf.write('_symmetry_equiv_pos_as_xyz\n')
+            outf.write('  x,y,z\n')
             outf.write('{:35s}{:.6f}\n'.format('_cell_length_a', st.cell_param[0]))
             outf.write('{:35s}{:.6f}\n'.format('_cell_length_b', st.cell_param[1]))
             outf.write('{:35s}{:.6f}\n'.format('_cell_length_c', st.cell_param[2]))
@@ -319,7 +323,7 @@ class StructureWriter:
                           '_atom_site_fract_x\n'
                           '_atom_site_fract_y\n'
                           '_atom_site_fract_z\n')
-            if not all(st.atomname):
+            if not all(st.atomname) or st.atomname[0] == st.elem[0]:
                 st.gen_atomname()
             for i, a in enumerate(st.atoms):
                 str1 = '{:7s}{:7s}'.format(a['atomname'], a['elem'])

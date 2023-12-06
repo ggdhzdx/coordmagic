@@ -467,14 +467,14 @@ class StructureReader:
         if lines[7].strip().lower().startswith('c'):
             coord = []
             for n in lines[7:]:
-                if re.search('-?\d+.\d+\s+-?\d+.\d+\s+-?\d+.\d+', n):
+                if re.search(r'-?\d+.\d+\s+-?\d+.\d+\s+-?\d+.\d+', n):
                     c = np.array([float(i) for i in n.strip().split()])*scaling_factor
                     coord.append(list(c))
             self.st.setter('coord', coord)
         else:
             fcoord = []
             for n in lines[7:]:
-                if re.search('-?\d+.\d+\s+-?\d+.\d+\s+-?\d+.\d+', n):
+                if re.search(r'-?\d+.\d+\s+-?\d+.\d+\s+-?\d+.\d+', n):
                     fcoord.append([float(i) for i in  n.strip().split()[:3]])
             self.st.setter('fcoord', fcoord)
 

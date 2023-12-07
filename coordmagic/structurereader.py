@@ -481,19 +481,21 @@ class StructureReader:
     def _read_xyz(self):
         read_coord = 0
         atoms = []
-        comments = []
+        comment = ''
         for l in self.file:
             x = l.split()
             if read_coord != 1 and len(x) == 1:
                 read_coord = 1
                 if len(atoms) == int(l):
                     self.st.atoms = atoms
+                    self.st.comment = comment
+                    self.st.basename = self.basename
                     self.st.complete_coord()
-                    self.st.choose_frame(self.st.frame_sn+1)
+                    self.st = self.st.new_frame()
                     atoms = []
                 continue
             if read_coord == 1:
-                comments.append(l)
+                comment = l
                 read_coord = 2
                 continue
             if read_coord == 2:
@@ -502,8 +504,9 @@ class StructureReader:
                 atom['coord'] = [float(i) for i in x[1:]]
                 atoms.append(atom)
         self.st.atoms = atoms
-        self.st.complete_coord()
-        self.st.comments = comments
+        self.st.comment = comment
+        self.st.basename = self.basename
+        self.st = self.st.frames[-1]
 
     def _conver_parmed(self):
         atoms = []

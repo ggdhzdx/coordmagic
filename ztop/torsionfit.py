@@ -38,7 +38,7 @@ class TorsionFit:
         paramrefine.adj_dihedral(contract='none')
         self.ps = paramrefine.ps
         self.st = cm.conver_structure(self.ps, 'parmed')
-        self.st.graph.gen_mol()
+        self.st.G.gen_mol()
         # print(self.st.molecules[2])
         if len(self.st.molecules) > 1:
             print('Error!!! More than one molecule detected in the input file')
@@ -77,10 +77,9 @@ class TorsionFit:
         st=cm.read_structure(self.xyz_flnm)
         coords = []
         energies = []
-        for k,v in st.frames.items():
-            st=st.choose_frame(k)
-            coords.append(st.coord)
-            energies.append(float(st.comments[k-1].split()[0]))
+        for struct in st.frames:
+            coords.append(struct.coord)
+            energies.append(float(struct.comment.split()[0]))
         ref_energies = np.array(energies) - np.min(energies)
         filtered_ene = []
         filtered_coord = []

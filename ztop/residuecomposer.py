@@ -191,7 +191,7 @@ class ResidueComposer:
         st = cm.conver_structure(parmed_struct,'parmed')
         print('Generating graph of {:s} ... '.format(paramrf.basename),end='',flush=True)
         start=timeit.default_timer()
-        st.graph.gen_mol()
+        st.G.gen_mol()
         end=timeit.default_timer()
         print('Graph generation took {:.3f} seconds'.format(end-start))
         cm_frag = cm.frag_by_breakbond(st.molecules[1],**cutting_site)

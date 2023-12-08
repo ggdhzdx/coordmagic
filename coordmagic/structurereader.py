@@ -116,19 +116,16 @@ class StructureReader:
                 x = float(l[30:38].strip())
                 y = float(l[38:46].strip())
                 z = float(l[46:54].strip())
-                atom['elem'] = l[76:78].strip()
+                atom['elem'] = l[76].strip().upper() + l[77].strip().lower()
                 atom['coord'] = [x, y, z]
                 self.st.atoms.append(atom)
             if 'END' in l:
                 self.st.cell_param = param
+                self.st.basename = self.basename
                 self.st.complete_coord()
                 self.st = self.st.new_frame()
-                self.st.basename = self.basename
         self.st = self.st.frames[-2]
         del self.st.frames[-1]
-
-
-
 
     def _read_cif(self):
         coord_flag = 0
@@ -368,17 +365,19 @@ class StructureReader:
         else:
             all_atoms = []
         if len(all_atoms) >= 1:
-            for atoms in all_atoms:
+            for i,atoms in enumerate(all_atoms):
                 self.st.atoms = atoms
                 self.st.complete_coord()
-                self.st = self.st.new_frame()
                 self.st.basename = self.basename
+                if i < len(energies):
+                    self.st.prop['energy'] = energies[i]
+                else:
+                    self.st.prop['energy'] = energies[-1]
+                if i < len(all_atoms) - 1:
+                    self.st = self.st.new_frame()
         else:
             self.st.atoms = []
-        self.st = self.st.frames[-2]
-        del self.st.frames[-1]
-        self.st.energies = energies
-        self.st.ex_energies = ex_energies
+        #self.st.prop['ex_energies'] = ex_energies
 
     def _read_gau_inp(self):
         cs_read = 0
@@ -488,7 +487,7 @@ class StructureReader:
                 read_coord = 1
                 if len(atoms) == int(l):
                     self.st.atoms = atoms
-                    self.st.comment = comment
+                    self.st.prop['comment'] = comment
                     self.st.basename = self.basename
                     self.st.complete_coord()
                     self.st = self.st.new_frame()
@@ -504,7 +503,7 @@ class StructureReader:
                 atom['coord'] = [float(i) for i in x[1:]]
                 atoms.append(atom)
         self.st.atoms = atoms
-        self.st.comment = comment
+        self.st.prop['comment'] = comment
         self.st.basename = self.basename
         self.st = self.st.frames[-1]
 

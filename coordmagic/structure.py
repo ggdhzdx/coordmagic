@@ -43,6 +43,7 @@ class Structure:
         self._cell_param = []
         self.cell_vect = cell_vect
         self.cell_param = cell_param
+        self.prop = defaultdict(str)
         # following are properties extract from self.atoms in complete_coord method
         # variable record for state change, used for lazy property calculation
         self.__recalc_coord = 0

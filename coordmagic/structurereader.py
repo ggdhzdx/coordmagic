@@ -116,7 +116,7 @@ class StructureReader:
                 x = float(l[30:38].strip())
                 y = float(l[38:46].strip())
                 z = float(l[46:54].strip())
-                atom['elem'] = l[76].strip().upper() + l[77].strip().lower()
+                atom['elem'] = l[76:78].strip().capitalize()
                 atom['coord'] = [x, y, z]
                 self.st.atoms.append(atom)
             if 'END' in l:
@@ -207,6 +207,7 @@ class StructureReader:
     def _read_gro(self):
         cell_vect = [0]
         #first two linea are omitted
+        atoms = []
         for l in itertools.islice(self.file, 2, None):
             if re.search('[a-zA-Z]',l):
                 atom = defaultdict(str)
@@ -227,7 +228,7 @@ class StructureReader:
                     vy = 0
                     vz = 0
                 atom['velocity'] = [vx, vy, vz]
-                self.st.atoms.append(atom)
+                atoms.append(atom)
             else:
                 if len(l.split()) == 3:
                     x1, y2, z3 = [float(i)*10 for i in l.split()]
@@ -240,6 +241,7 @@ class StructureReader:
                 cell_vect = [[x1, y1, z1], [x2, y2, z2], [x3, y3, z3]]
         if np.sum(np.abs(cell_vect)) > 0:
             self.st.cell_vect = cell_vect
+        self.st.atoms = atoms
         
 
     def _read_STRUC(self):

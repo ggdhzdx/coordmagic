@@ -176,14 +176,14 @@ class keyword:
     def kw_str2dict(self,keywords):
         kw_dict=OrderedDict()
         if self.inp_kwtype.startswith('gau'):
-            kw_list=re.split("\s+",keywords)
+            kw_list=re.split(r"\s+",keywords)
             for i in kw_list:
                 if i.lower().startswith('iop') or i.startswith('6-31') or i.startswith('3-21') or '(p)' in i:
                     head_i=i
                     tail_i=''
                 else:
-                    head_i = re.split('=|\(',i)[0]
-                    tail_i = re.split('\(|,|\)',i[len(head_i):].strip('='))
+                    head_i = re.split(r'=|\(',i)[0]
+                    tail_i = re.split(r'\(|,|\)',i[len(head_i):].strip('='))
                 tail_dict=OrderedDict()
                 for s in tail_i:
                     if '=' in s:
@@ -523,10 +523,12 @@ class inputParam:
     def _read_gauout(self):
         with open(self.filename,'r') as inp:
             read_coord = 2
+            read_fix = 0
             kw_flag = 3
             read_init = 0
             all_coords = []
             freeze_flag = []
+            fix_info = []
             for l in inp:
                 if 'Multiplicity =' in l and 'Charge =' in l:
                     read_init = 1
@@ -535,7 +537,15 @@ class inputParam:
                     charge_spin = [charge,spin]
                     self.update_param(charge_spin=' '.join(charge_spin))
                     continue
-                if read_init == 1 and re.match('^\s*$',l):
+                if 'The following ModRedundant input section has been read' in l:
+                    read_fix = 1
+                    continue
+                if read_fix ==1:
+                    if re.match(r'^\s*$',l):
+                        read_fix = 0
+                    else:
+                        fix_info.append(l)
+                if read_init == 1 and re.match(r'^\s*$',l):
                     read_init = 0
                 if read_init == 1 and len(l.strip().split()) > 3:
                     freeze_flag.append(l.split()[1])
@@ -579,6 +589,8 @@ class inputParam:
             self.update_param(keywords = kw.strip())
             self.coords=self._choose_coords(all_coords)
             self.kw_type = 'gau'
+            for l in fix_info:
+                self.gjf_add_info.append(re.sub(r'(?<=\d)\s+(?=\d)', ',', l).strip())
             print('keywords read: \"{:s}\"'.format(kw))
 
     def _choose_coords(self,allcoords):
@@ -609,24 +621,24 @@ class inputParam:
         with open(self.filename,'r') as inp:
             coords=[]
             for l in inp:
-                if re.match('^\s*-?\d\s+\d\s?',l) and cs_read == 0:
+                if re.match(r'^\s*-?\d\s+\d\s?',l) and cs_read == 0:
                     self.charge_spin = l.strip()
                     cs_read = 1
                     kw_flag = 0
                     continue
-                if re.match('^\s*%nproc',l):
+                if re.match(r'^\s*%nproc',l):
                     self.update_param(nproc=l.strip().split('=')[1])
-                if re.match('^\s*%mem',l):
+                if re.match(r'^\s*%mem',l):
                     self.update_param(mem=l.strip().split('=')[1])
-                if re.match('^\s*#',l):
+                if re.match(r'^\s*#',l):
                     keywords = l.strip()
                     kw_flag=1
                     continue
-                if kw_flag == 1 and not re.match('^\s*$',l):
+                if kw_flag == 1 and not re.match(r'^\s*$',l):
                     keywords = keywords +" "+ l.strip()
                 else:
                     kw_flag = 0
-                if cs_read == 1 and re.match('^\s*$',l):
+                if cs_read == 1 and re.match(r'^\s*$',l):
                     cs_read = 2
                     continue
                 if cs_read == 1:
@@ -636,10 +648,10 @@ class inputParam:
                     elif len(l.strip().split()) == 4:
                         coords.append(l.strip())
                 if cs_read == 2:
-                    if file_end == 1 and re.match('^\s*$',l):
+                    if file_end == 1 and re.match(r'^\s*$',l):
                         file_end = 2
                         break
-                    if re.match('^\s*$',l):
+                    if re.match(r'^\s*$',l):
                         file_end = 1
                     else:
                         file_end = 0
@@ -715,7 +727,7 @@ class inputParam:
                 if len(l.split()) == 4:
                     coords.append(l.strip())
                     read_flag = 1
-                if re.match('^\d+$',l) and read_flag == 1 :
+                if re.match(r'^\d+$',l) and read_flag == 1 :
                     break
             self.coords=coords
 
@@ -729,7 +741,7 @@ class inputParam:
             if len(l.split()) > 3 and nol > 2:
                 coords.append(l.strip())
                 read_flag = 1
-            if re.match('^\d+$',l) and read_flag == 1 :
+            if re.match(r'^\d+$',l) and read_flag == 1 :
                 break
         self.coords=coords
 

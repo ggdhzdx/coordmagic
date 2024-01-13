@@ -183,7 +183,7 @@ class ResidueComposer:
         '''
         paramrf.adj_dihedral(contract='all')
         # convert to amber parm type to add dihedral
-        # gromacs type can not gen pairt form 1,4 automatically
+        # gromacs type can not gen pair form 1,4 automatically
         # parmed_struct = pmd.amber.AmberParm.from_structure(paramrf.ps)
         parmed_struct = paramrf.ps
         res=defaultdict(str)
@@ -506,7 +506,9 @@ class ResidueComposer:
             set_bond(parmed_Cfrag,bondA,mapA,bondB)
             set_angle(parmed_Cfrag,A['sites'][sa]['angles'],mapA)
             set_angle(parmed_Cfrag,B['sites'][sb]['angles'],mapB)
+            #print(A['sites'][sa]['adjusts'])
             set_adjust(parmed_Cfrag,A['sites'][sa]['adjusts'],mapA)
+            #print(B['sites'][sb]['adjusts'])
             set_adjust(parmed_Cfrag,B['sites'][sb]['adjusts'],mapB)
             set_dihedral(parmed_Cfrag,A['sites'][sa]['dihedrals'],mapA)
             set_dihedral(parmed_Cfrag,B['sites'][sb]['dihedrals'],mapB)

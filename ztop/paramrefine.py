@@ -41,6 +41,7 @@ class ParamRefine:
         # print(self.ps.rb_torsions[0].ignore_end)
         # self.ps = pmd_struct
         # self.ps = pmd.gromacs.GromacsTopologyFile.from_structure(pmd_struct)
+        # self.complete_adjust()
         self.top_bug_fix()
 
 
@@ -50,7 +51,33 @@ class ParamRefine:
             if a.atom_type == 'cl':
                 a.element = 17
                 a.atomic_num = 17
-
+    
+    # def complete_adjust(self):
+    #     """complete missing adjust
+    #     adjust are usually 1-4 nonbonded interaction
+    #     """
+    #     #print(len(self.ps.adjusts))
+    #     # print(self.ps.adjust_types)
+    #     #print(len([d for d in self.ps.dihedrals if not d.improper]))
+    #     # print(len([a for a in self.ps.adjusts if a.type.chgscale !=0 ]))
+    #     exist_pair = [frozenset([a.atom1,a.atom2]) for a in self.ps.adjusts] 
+    #     d_pair = [frozenset([d.atom1,d.atom4]) for d in self.ps.dihedrals]
+    #     #print(len(exist_pair))
+    #     #print(len(d_pair))
+    #     for a in self.ps.adjusts:
+    #         pair = frozenset([a.atom1,a.atom2])
+    #         # if pair in d_pair:
+    #             # print(a)
+    #     # for d in self.ps.dihedrals:
+    #     #     if not d.improper:
+    #     #         pair = frozenset([d.atom1,d.atom4])
+    #     #             pass
+    #     #             #print("xxxxxxxxxxxxxxxx")
+    #     #         else:
+    #     #             print("aaaaaa")
+    #     #             new_pair=pmd.NonbondedException(d.atom1,d.atom2)
+    #     #             print(new_pair)
+            
 
     def convert2struct(self,st):
         '''generate a new parmed structure object to remove 

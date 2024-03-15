@@ -35,7 +35,8 @@ parser.add_argument('-b',dest='basis_set',help='input two basis set, seperate by
 parser.add_argument('-A',dest='app_name',help='append name to the file name.')
 parser.add_argument('-T',dest='trim_name',help='remove append name from the file name.')
 parser.add_argument('-n',dest='nproc',help='set the number of processes of the input gjf file. Default: read from file or 24')
-parser.add_argument('-m',dest='mem',help='set the memory fo the input gjf file, unit default as GB. Defaul: read from file or 16GB')
+parser.add_argument('-m',dest='mem',help='set the memory for the input gjf file, unit default as GB. Defaul: read from file or 16GB')
+parser.add_argument('-B',dest='block',help='set the block input for orca. e.g. "%%tddft;nroots 5;DoNTO true;NTOStates 1,2;TRIPLETS TRUE;end"',default="")
 parser.add_argument('-P',dest='profile',help='store the common keywords in profile, avail options are:\n'
                     'opt : use keywords "opt pbe1pbe def2svp emp=gd3bj g09default iop(5/13=1)"\n'
                     'ts : read log file and add "opt(ts,calcall,noeigentest) freq"\n'
@@ -47,6 +48,7 @@ parser.add_argument('-P',dest='profile',help='store the common keywords in profi
                     'soc : read log file, remove opt, add "td(50-50,nstates=10) 6D 10F nosymm GFInput" and write rwf\n'
                     'st : step 1 "opt pbe1pbe def2svp em(gd3bj) g09default:\n'
                     '     step 2 "geom=allcheck guess=read pbe1pbe def2svp td(50-50,nstates=10) 6D 10F nosymm GFInput\n'
+                    'otddh: tddft calculation for orca using SCS-PBE-QIDH\n'
                     'nac : read log file, remove "opt freq" add "td prop(fitcharge,field) iop(6/22=-4,6/29=1,6/30=0,6/17=2) nosymm"\n')
 parser.add_argument('-f',dest='file',help='use keywords form other file')
 parser.add_argument('-F',dest='fragment',help='define fragment, available options are:\n'
@@ -167,7 +169,7 @@ class basisSet:
                 self.basis=self.basis.replace('f2q','f2_q')
         return  self.basis
 
-class keyword:
+class Keyword:
     def __init__(self,keywords_string,kwtype='gau'):
         self.keywords_str=keywords_string
         self.inp_kwtype=kwtype
@@ -188,9 +190,9 @@ class keyword:
                 for s in tail_i:
                     if '=' in s:
                         s_k,s_v=s.split('=')
-                        tail_dict[s_k]=s_v
+                        tail_dict[s_k.lower()]=s_v.lower()
                     elif s:
-                        tail_dict[s]=''
+                        tail_dict[s.lower()]=''
                 kw_dict[head_i]=tail_dict
         return kw_dict
 
@@ -211,6 +213,7 @@ class keyword:
         return ' '.join(keywords_list)
 
     def kw_dict2block(self,kw_dict):
+        """kw_dict is a dict of dict"""
         if not kw_dict:
             return ''
         else:
@@ -262,6 +265,21 @@ class keyword:
                     sol_mod='cpcm'
                 self.kw_dict[sol_mod]={sol:""}
                 del self.kw_dict[k]
+            if k.lower().startswith('td'):
+                if 'nstates' in v.keys():
+                    ns=v['nstates']
+                else:
+                    ns="3"
+                block_kw["tddft"]={"NROOTS":str(ns)}
+                if "50-50" in v.keys() or 'triplets' in v.keys():
+                    block_kw["tddft"]['TRIPLETS'] = "TRUE"
+                    block_kw["tddft"]['DOSOC'] = "TRUE"
+                if "root" in v.keys():
+                    block_kw["tddft"]['IRoot'] = v['root']
+                    block_kw["tddft"]['FollowIRoot'] = "TRUE"
+                if "nac" in v.keys():
+                    block_kw["tddft"]['NACME'] = "TRUE"
+                    block_kw["tddft"]['ETF'] = "TRUE"
         kw_str=self.kw_dict2str()+'\n'+self.kw_dict2block(block_kw)
         return kw_str
 
@@ -378,13 +396,16 @@ class inputParam:
                       'irc':{'rm_keywords':'opt freq','add_keywords':'irc(calcall,lqa,maxpoints=50)'},
                       'uv':{'rm_keywords':'opt freq','add_keywords':'td(singlets,nstates=30)'},
                       'fluo':{'add_keywords':'opt td'},
-                      'resp':{'keywords':'opt b3lyp def2SVP scrf=pcm emp=gd3bj pop=mk iop(6/33=2) iop(6/42=6)'},
-                      'soc':{'rm_keywords':'opt freq','add_keywords':'td(50-50,nstates=10) 6D 10F nosymm GFInput','rwf':True},
+                      'resp':{'keywords':'opt b3lyp def2SVP scrf=pcm emp=gd3bj pop=mk iop(6/33=2) iop(6/42=6)','program':'gaussian'},
+                      'soc':{'rm_keywords':'opt freq','add_keywords':'td(50-50,nstates=10) 6D 10F nosymm GFInput','rwf':True,'program':'gaussian'},
                       'st':{'keywords':'opt pbe1pbe def2svp em(gd3bj) g09default',
                             'steps':'geom=allcheck guess=read pbe1pbe def2svp td(50-50,nstates=10) 6D 10F nosymm GFInput',
-                            'rwf':True },
+                            'rwf':True,'program':'gaussian'},
                       'nac':{'add_keywords':'td prop(fitcharge,field) iop(6/22=-4,6/29=1,6/30=0,6/17=2) nosymm',
-                             'rm_keywords':'opt freq'}
+                             'rm_keywords':'opt freq','program':'gaussian'},
+                      'otddh':{'keywords':"RIJCOSX RI-SCS-PBE-QIDH def2-SVP def2/J def2-SVP/C TIGHTSCF",
+                               'block':"%tddft;dcorr 1;nroots 5;triplets true;tda true;printlevel 3;end",
+                               'program':"orca"}
                       }
         if self.args.profile:
             self.update_param_by_args(arg_dict=self.profile[self.args.profile])
@@ -411,6 +432,7 @@ class inputParam:
         self.suffix = os.path.splitext(self.filename)[1]
 
     def modify_name(self):
+        # modify file name
         if self.trim_name in self.base_name and self.trim_name:
             self.base_name = self.base_name.split(self.trim_name)[0]
         if self.app_name:
@@ -487,6 +509,11 @@ class inputParam:
         self.keywords=self.kw_obj.gen_keywords(self.program)
         if not self.keywords.strip().startswith('!'):
             self.keywords='! ' + self.keywords
+        if self.block:
+            self.block = self.block.split(";")
+        else:
+            self.block=[]
+
 
     def prep4out(self):
         self._apply_profile()
@@ -497,7 +524,7 @@ class inputParam:
         self.generate_fragment()
         self.gen_atomic_basis()
         self.bs_obj=basisSet(self.keywords,kwtype=self.kwtype)
-        self.kw_obj=keyword(self.keywords,kwtype=self.kwtype)
+        self.kw_obj=Keyword(self.keywords,kwtype=self.kwtype)
         if self.program.startswith('gau'):
             self._prep_gau_kw()
         if self.program.startswith('orc'):
@@ -770,7 +797,7 @@ class writeOut:
             if self.param.program.lower().startswith('gau'):
                 self._write_gaussian(basename=bn,coord=self.param.coord_list[i])
             elif self.param.program.lower().startswith('orc'):
-                self._write_orca(basnname=bn,coord=self.param.coord_list[i])
+                self._write_orca(basename=bn,coord=self.param.coord_list[i])
             elif self.param.program.lower().startswith('dal'):
                 self._write_dalton(basename=bn,coord=self.param.coord_list[i])
             else:
@@ -863,6 +890,8 @@ class writeOut:
         inp = open(flnm,'w')
         print('{:s}: keywords used: \"{:s}\"'.format(flnm,self.param.keywords.strip()))
         inp.write(self.param.keywords)
+        for line in self.param.block:
+            inp.write(line+'\n')
         if self.param.mem.lower().endswith('gb'):
             mem=int(self.param.mem[:-2])*1024
         elif self.param.mem.lower().endswith('mw'):

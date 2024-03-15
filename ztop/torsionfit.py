@@ -1,4 +1,5 @@
 '''todo 
+
 constrained fit with all params fitted simutaneously
 
 
@@ -79,7 +80,7 @@ class TorsionFit:
         energies = []
         for struct in st.frames:
             coords.append(struct.coord)
-            energies.append(float(struct.comment.split()[0]))
+            energies.append(float(struct.prop['comment'].split()[0]))
         ref_energies = np.array(energies) - np.min(energies)
         filtered_ene = []
         filtered_coord = []

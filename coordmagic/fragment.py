@@ -200,7 +200,7 @@ def connect_frag(fragA,fragB,joinsite='',breadth_first=False):
     match by following rules:
     1. A2 will match with B2 or B21 but not with B3 or B31
     2. A21 will match with B21 but not with B22 or B223 for homo polymers
-    3. A2t will  match A2h, A2 but not with A2t
+    3. A2t will match A2h, A2 but not with A2t
     4. A21 will match A21 bat not A22
     5. site label A will match with any site label such as B1 B81 Baxy
     6. If fragB has two sites: A1 and B1 and fragA has one site A1, then A1-B1 has higher priority than A1-A1

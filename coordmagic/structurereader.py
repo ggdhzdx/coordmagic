@@ -375,11 +375,16 @@ class StructureReader:
                     self.st.prop['energy'] = energies[i]
                 else:
                     self.st.prop['energy'] = energies[-1]
+                if i < len(ex_energies):
+                    self.st.prop['ex_energy'] = ex_energies[i]
+                elif len(ex_energies) > 0:
+                    self.st.prop['ex_energy'] = ex_energies[-1]
+                else:
+                    self.st.prop['ex_energies'] = []
                 if i < len(all_atoms) - 1:
                     self.st = self.st.new_frame()
         else:
             self.st.atoms = []
-        #self.st.prop['ex_energies'] = ex_energies
 
     def _read_gau_inp(self):
         cs_read = 0
@@ -566,7 +571,7 @@ class StructureReader:
             self.st.period_flag = 0
         for sn in sorted(list(self.struct_obj.nodes())):
             self.st.atoms.append(defaultdict(str,self.struct_obj.nodes[sn]))
-            self.st.complete_coord(wrap=False)
+            self.st.complete_coord()
 
     def _conver_xyz(self, cell_param='',cell_vect='',islist=False, delimit=None,frac_coord=False):
         '''generate structure object from string in the form:

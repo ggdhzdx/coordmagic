@@ -404,7 +404,7 @@ class inputParam:
                       'nac':{'add_keywords':'td prop(fitcharge,field) iop(6/22=-4,6/29=1,6/30=0,6/17=2) nosymm',
                              'rm_keywords':'opt freq','program':'gaussian'},
                       'otddh':{'keywords':"RIJCOSX RI-SCS-PBE-QIDH def2-SVP def2/J def2-SVP/C TIGHTSCF",
-                               'block':"%tddft;dcorr 1;nroots 5;triplets true;tda true;printlevel 3;end",
+                               'block':"%tddft;dcorr 1;nroots 5;triplets true;DoNTO true;NTOStates 1,2,3;NTOThresh 1e-4;tda true;printlevel 3;end",
                                'program':"orca"}
                       }
         if self.args.profile:

@@ -29,9 +29,9 @@ class TorsionFit:
                 p = p + [0]
             elif len(p) > 3:
                 p = p[:3]
-            angle_list = list(range(int(p[2]),int(p[1])+1,int(p[0])))
+            angle_list = list(np.arange(float(p[2]),float(p[1])+1,float(p[0])))
         else:
-            angle_list = [int(i) for i in angle.split()]
+            angle_list = [float(i) for i in angle.split()]
         self.angle_list = angle_list
         self.wkdir = '_'.join([self.basename,'DFit',self.bond])
         self.xyz_flnm = self.wkdir + '.xyz'
@@ -137,7 +137,7 @@ class TorsionFit:
         os.chdir(self.wkdir)
         exit_flag = 0
         for a in self.angle_list:
-            angle_str="{:03d}".format(a)
+            angle_str="{:06.2f}".format(a)
             flnm = self.basename+'_'+angle_str+'.gjf'
             chknm = self.basename+'_'+angle_str+'.chk'
             combined_param['chk'] = chknm
@@ -184,19 +184,22 @@ class TorsionFit:
         for log in logfiles:
             st=cm.read_structure(log)
             if st:
-                if len(st.ex_energies) > 0 and (not self.ene or self.ene=='ex'):
-                    ene = st.ex_energies[-1]
-                elif self.ene=='g' or not self.ene:
-                    ene = st.energies[-1]
+                if st.prop["ex_energy"] and (not self.ene or self.ene=='ex'):
+                    ene = st.prop["ex_energy"]
+                elif st.prop["energy"] and (self.ene=='g' or not self.ene):
+                    ene = st.prop["energy"]
+                elif not st.prop["energy"] and not st.prop["ex_energy"]:
+                    print('Error! could not find ground or excited state energy from gaussian log file')
+                    sys.exit()
                 else:
                     print('Error! options ene={:s} is not right.\n'
                           'Available options are g or ex(only if excited state energies are available)'.format(self.ene))
                     sys.exit()
-                comment = '{:.6f}'.format(ene * 2625.5) + ' kJ'
+                comment = '{:.6f}'.format(ene * 2625.5) + ' kJ/mol'
                 if idx == 0:
-                    st.write_structure(self.xyz_flnm,append=False,options='comment:'+comment)
+                    st.save(self.xyz_flnm,frame='last',append=False,comment=comment)
                 else:
-                    st.write_structure(self.xyz_flnm,append=True,options='comment:'+comment)
+                    st.save(self.xyz_flnm,frame='last',append=True,comment=comment)
             idx = idx + 1
 
     def calc_score(self, sn):
@@ -479,12 +482,14 @@ class TorsionFit:
         def calcsc(xtick,mmx):
             return min([min(np.abs(np.array(xtick) - abs(mmx[0]))),min(np.abs(np.array(xtick) - abs(mmx[1])))])
         min_sc = sorted([(calcsc(k,minmax_x),k) for k in xtick_dict],key=lambda x:x[0])[0][1]
-        xticks = xtick_dict[min_sc]
-        xticks = [i for i in xticks if i>min(x)-10 and i<max(x)+10]
+        if min_sc in xtick_dict:
+            xticks = xtick_dict[min_sc]
+            xticks = [i for i in xticks if i>min(x)-10 and i<max(x)+10]
+            ax1.set_xticks(xticks)
+            ax2.set_xticks(xticks)
         # draw mm energy curve
         x,y = sortxy(angles_1,mm_ene)
         ax1.plot(x,y, '.-', label='Initial param ')
-        ax1.set_xticks(xticks)
         ax1.set_xlabel('dihedral angle {:s}'.format('-'.join([str(i) for i in self.dihedrals[0][0]])))
         ax1.set_ylabel('kJ/mol')
         ax1.legend()
@@ -533,7 +538,6 @@ class TorsionFit:
 #         x,y = sortxy(angles_1,diff_ene)
 #         ax2.plot(x, y, '.-', label='diff ')
         ax2.set_xlabel('dihedral angle {:s}'.format('-'.join([str(i) for i in self.dihedrals[0][0]])))
-        ax2.set_xticks(xticks)
         ax2.set_ylabel('kJ/mol')
         ax2.legend()
         ax2.annotate('R2={:.5f}'.format(r2),xy=(0.02,0.95),xycoords='axes fraction')

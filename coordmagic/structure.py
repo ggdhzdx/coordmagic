@@ -66,7 +66,7 @@ class Structure:
         #self.T = Transformer(self)
         #self.L = Layer(self)
         self.param = Parameter() # store all constant like atom radius, vdw parameters...
-        self.L = LabelAtom(self) # properties or descriptors that mapped to atom
+        self.L = LabelAtom(self) # propertes or descriptors that mapped to atom
         self.G = MolGraph(self)
         #self.MC = Cluster(self)
         #self.ML = label(self)
@@ -105,7 +105,7 @@ class Structure:
             for f in fs:
                 f.frames = merged_frames
                 merged_frames.append(f)
-
+        
     def new_frame(self,st=None, atoms: list=None, elem: list=None, atomnum: list=None, coord: list=None, fcoord: list=None, cell_vect: list=None, cell_param:list=None):
         if st is None:
             st=Structure(atoms=atoms, elem=elem, atomnum=atomnum, coord=coord, fcoord=fcoord, cell_vect=cell_vect, cell_param=cell_param)
@@ -133,6 +133,13 @@ class Structure:
                 f.frames = merged_frames
                 merged_frames.append(f)
         return st_list
+    
+    def gen_frames_from_coords(self,list_of_coords):
+        for c in list_of_coords:
+            st=self.new_frame(atoms=copy.deepcopy(self.atoms), 
+                              cell_vect=copy.deepcopy(self.cell_vect))
+            st.coord=c
+
 
     def _getter(self, prop_name):
         """

@@ -27,6 +27,7 @@ __all__ = [
     'rotate_cw_around',
     'rotate_dihedral_to',
     'translate_along',
+    'gen_coords4FD'
 ]
 
 def shift_st_abc(struct, abc):
@@ -252,7 +253,32 @@ def rotate_mol_dihedral(graph,bond,angle):
 
     return G
 
+def gen_coords4FD(struct,delta,freeze=None):
+    '''generate coords for finite difference.
+    delta is the displace distance in anstron
+    freeze is a N,3 array where 0 is not freeze and 1 is freeze
+    return a list of 6N element
+    each element is a N,3 array with one coord been displaced
+    the order is i,j,k where i is atoms, j is xyz, and k is plus or minus delta
+    '''
+    N=len(struct.atoms)
+    if freeze == None:
+        init_displace = np.zeros((N,3))
+    else:
+        if np.array(freeze).shape == tuple([N,3]):
+            init_displace = np.array(freeze)
+        else:
+            print("Error!! the shape of freeze matrix {:d}x{:d} diffs from coords shape{:d}x{:d}".format(
+                np.array(freeze).shape[0],np.array(freeze).shape[1],N,3))
+    indexes=[(i,j) for i in range(N) for j in range(3)]        
+    all_displace = [init_displace.copy() for _ in range(6*N)]
+    for idx, (i, j) in enumerate(indexes):
+        all_displace[idx*2][i, j] += delta
+        all_displace[idx*2+1][i, j] -= delta
+    return [np.array(struct.coord)+i for i in all_displace]
+    
 
+        
 
 
 

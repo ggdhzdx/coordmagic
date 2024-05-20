@@ -48,7 +48,8 @@ parser.add_argument('-P',dest='profile',help='store the common keywords in profi
                     'soc : read log file, remove opt, add "td(50-50,nstates=10) 6D 10F nosymm GFInput" and write rwf\n'
                     'st : step 1 "opt pbe1pbe def2svp em(gd3bj) g09default:\n'
                     '     step 2 "geom=allcheck guess=read pbe1pbe def2svp td(50-50,nstates=10) 6D 10F nosymm GFInput\n'
-                    'otddh: tddft calculation for orca using SCS-PBE-QIDH\n'
+                    'otddh: tddft calculation for orca using mpw2b2plyp\n'
+                    'oopt: geom opt by orca using rijcosx b3lyp def2svp\n'
                     'nac : read log file, remove "opt freq" add "td prop(fitcharge,field) iop(6/22=-4,6/29=1,6/30=0,6/17=2) nosymm"\n')
 parser.add_argument('-f',dest='file',help='use keywords form other file')
 parser.add_argument('-F',dest='fragment',help='define fragment, available options are:\n'
@@ -403,9 +404,14 @@ class inputParam:
                             'rwf':True,'program':'gaussian'},
                       'nac':{'add_keywords':'td prop(fitcharge,field) iop(6/22=-4,6/29=1,6/30=0,6/17=2) nosymm',
                              'rm_keywords':'opt freq','program':'gaussian'},
-                      'otddh':{'keywords':"RIJCOSX RI-SCS-PBE-QIDH def2-SVP def2/J def2-SVP/C TIGHTSCF",
-                               'block':"%tddft;dcorr 1;nroots 5;triplets true;DoNTO true;NTOStates 1,2,3;NTOThresh 1e-4;tda true;printlevel 3;end",
-                               'program':"orca"}
+                      'otddh':{'keywords':"RIJCOSX RI-mPW2PLYP def2-SVP def2/J def2-SVP/C TIGHTSCF",
+                               'block':"%tddft;dcorr 1;nroots 5;triplets true;DoNTO true;NTOStates 1,2,3;NTOThresh 1e-4;tda true;printlevel 3;end;%mp2 density relaxed end",
+                               'program':"orca"},
+                      'osoc':{'keywords':"RIJCOSX PBE0 def2-SVP def2/J  TIGHTSCF",
+                               'block':"%tddft;nroots 5;triplets true;DoSOC true;tda true;printlevel 3;end",
+                               'program':"orca"},
+                      'oopt':{'keywords':"RIJCOSX B3LYP/G def2-SVP def2/J LOOSEOPT TIGHTSCF nopop",
+                               'program':'orca'}
                       }
         if self.args.profile:
             self.update_param_by_args(arg_dict=self.profile[self.args.profile])
@@ -509,8 +515,9 @@ class inputParam:
         self.keywords=self.kw_obj.gen_keywords(self.program)
         if not self.keywords.strip().startswith('!'):
             self.keywords='! ' + self.keywords
-        if self.block:
-            self.block = self.block.split(";")
+        if hasattr(self, 'block'):
+            if self.block:
+                self.block = self.block.split(";")
         else:
             self.block=[]
 

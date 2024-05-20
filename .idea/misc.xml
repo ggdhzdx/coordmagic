@@ -3,7 +3,7 @@
   <component name="Black">
     <option name="sdkName" value="Python 3.9" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="Remote Python 3.9.18 (sftp://zc@192.168.3.201:22/home/software/anaconda3/bin/python3)" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="C:\Users\ggdhz\anaconda3" project-jdk-type="Python SDK" />
   <component name="PyPackaging">
     <option name="earlyReleasesAsUpgrades" value="true" />
   </component>

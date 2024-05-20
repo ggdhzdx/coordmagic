@@ -284,6 +284,7 @@ class StructureReader:
 
     def _read_mol2(self):
         read_flag = 0
+        atoms=[]
         for l in self.file:
             if '@<TRIPOS>ATOM' in l:
                 read_flag = 1
@@ -303,7 +304,8 @@ class StructureReader:
                     atom['resname'] = l.split()[7]
                 if len(l.split()) >= 9:
                     atom['charge'] = float(l.split()[8])
-                self.st.atoms.append(atom)
+                atoms.append(atom)
+        self.st.atoms=atoms
 
     def _read_gau_log(self):
         read_coord = ""
@@ -380,7 +382,7 @@ class StructureReader:
                 elif len(ex_energies) > 0:
                     self.st.prop['ex_energy'] = ex_energies[-1]
                 else:
-                    self.st.prop['ex_energies'] = []
+                    self.st.prop['ex_energy'] = None
                 if i < len(all_atoms) - 1:
                     self.st = self.st.new_frame()
         else:
@@ -525,7 +527,6 @@ class StructureReader:
             atom['resname'] = a.residue.name
             atoms.append(atom)
         self.st.atoms = atoms
-        # print(self.st.atoms)
         if self.struct_obj.box is not None:
             self.st.cell_param = self.struct_obj.box
         self.st.complete_coord()

@@ -49,6 +49,7 @@ parser.add_argument('-P',dest='profile',help='store the common keywords in profi
                     'st : step 1 "opt pbe1pbe def2svp em(gd3bj) g09default:\n'
                     '     step 2 "geom=allcheck guess=read pbe1pbe def2svp td(50-50,nstates=10) 6D 10F nosymm GFInput\n'
                     'otddh: tddft calculation for orca using mpw2b2plyp\n'
+                    'osoc: soc by orca using rijcosx pbe0 def2svp\n'
                     'oopt: geom opt by orca using rijcosx b3lyp def2svp\n'
                     'nac : read log file, remove "opt freq" add "td prop(fitcharge,field) iop(6/22=-4,6/29=1,6/30=0,6/17=2) nosymm"\n')
 parser.add_argument('-f',dest='file',help='use keywords form other file')
@@ -544,14 +545,17 @@ class inputParam:
     def read_input_file(self):
         if self.suffix=='.gjf' or self.suffix=='.com':
             self._read_gauinp()
-        if self.suffix=='.log' or self.suffix=='.out':
+        elif self.suffix=='.log' or self.suffix=='.out':
             self._read_gauout()
-        if self.suffix=='.cdx':
+        elif self.suffix=='.cdx':
             self._read_cdx()
-        if self.suffix=='.xyz':
-            self._read_xyz()
-        if self.suffix=='.sdf':
-            self._read_sdf()
+        else:
+            import coordmagic as cm
+            st = cm.read_structure(self.filename)
+            coords = []
+            for i,c in enumerate(st.coord):
+                coords.append('{:s}{:12.6f}{:12.6f}{:12.6f}'.format(st.elem[i],*c))
+            self.coords=coords
 
         #idnetify all the elements in the structure
     def _read_gauout(self):
@@ -864,7 +868,8 @@ class writeOut:
             if self.param.steps:
                 for i,com in enumerate(self.param.steps.split(';')):
                     gjf.write('--Link{:d}--\n'.format(i+1))
-                    gjf.write('%rwf='+basename+'.rwf\n')
+                    if self.param.rwf:
+                        gjf.write('%rwf='+basename+'.rwf\n')
                     gjf.write('%chk='+basename+'.chk\n')
                     gjf.write('%nproc='+self.param.nproc+'\n')
                     gjf.write('%mem='+self.param.mem+'\n')
@@ -995,7 +1000,8 @@ class multiArgs:
             add_kw_list=args.add_keywords.split('|')
             app_name_list=[]
             for s in add_kw_list:
-                s=s.translate(None,'!@#$%^&*()=/')
+                transtab = str.maketrans('', '', '!@#$%^&*()=/')
+                s=s.translate(transtab)
                 app_name='_'+s
                 app_name_list.append(app_name)
             for i,k in enumerate(add_kw_list):

@@ -482,6 +482,7 @@ class TorsionFit:
         def calcsc(xtick,mmx):
             return min([min(np.abs(np.array(xtick) - abs(mmx[0]))),min(np.abs(np.array(xtick) - abs(mmx[1])))])
         min_sc = sorted([(calcsc(k,minmax_x),k) for k in xtick_dict],key=lambda x:x[0])[0][1]
+
         if min_sc in xtick_dict:
             xticks = xtick_dict[min_sc]
             xticks = [i for i in xticks if i>min(x)-10 and i<max(x)+10]

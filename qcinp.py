@@ -50,6 +50,7 @@ parser.add_argument('-P',dest='profile',help='store the common keywords in profi
                     '     step 2 "geom=allcheck guess=read pbe1pbe def2svp td(50-50,nstates=10) 6D 10F nosymm GFInput\n'
                     'otddh: tddft calculation for orca using mpw2b2plyp\n'
                     'osoc: soc by orca using rijcosx pbe0 def2svp\n'
+                    'osoch: soc by orca using rijcosx pbe0 def2svp with heavy atoms (need manual change inp)\n'
                     'oopt: geom opt by orca using rijcosx b3lyp def2svp\n'
                     'nac : read log file, remove "opt freq" add "td prop(fitcharge,field) iop(6/22=-4,6/29=1,6/30=0,6/17=2) nosymm"\n')
 parser.add_argument('-f',dest='file',help='use keywords form other file')
@@ -376,6 +377,7 @@ class inputParam:
         self.freeze_flag=[]
         self.connect_info = []
         self.gjf_add_info = []
+        self.iso_flag = []
         self.new_chk = 0 # determine if need to generate new chk file
         self.read_chk = 0 # determine wether need to read chkfile
         self.args=args
@@ -411,7 +413,13 @@ class inputParam:
                       'osoc':{'keywords':"RIJCOSX PBE0 def2-SVP def2/J  TIGHTSCF",
                                'block':"%tddft;nroots 5;triplets true;DoSOC true;tda true;printlevel 3;end",
                                'program':"orca"},
-                      'oopt':{'keywords':"RIJCOSX B3LYP/G def2-SVP def2/J LOOSEOPT TIGHTSCF nopop",
+                      'otdopt':{'keywords':"RIJCOSX OPT PBE0 def2-SVP def2/J  TIGHTSCF D4",
+                               'block':"%tddft;nroots 3;iroot 1;triplets false;tda true;printlevel 3;end",
+                               'program':"orca"},
+                      'osoch':{'keywords':"RIJCOSX DKH2 PBE0 DKH-def2-SVP SARC/J RIJCOSX TIGHSCF",
+                               'block':"%tddft;nroots 5;triplets true;DoSOC true;tda true;printlevel 3;end;%basis;NewGTO Os SARC-DHK-TZVP end;end",
+                               'program':"orca"},
+                      'oopt':{'keywords':"r2SCAN-3c OPT",
                                'program':'orca'}
                       }
         if self.args.profile:
@@ -553,8 +561,16 @@ class inputParam:
             import coordmagic as cm
             st = cm.read_structure(self.filename)
             coords = []
+            iso_flag = []
             for i,c in enumerate(st.coord):
                 coords.append('{:s}{:12.6f}{:12.6f}{:12.6f}'.format(st.elem[i],*c))
+            for a in st.atoms:
+                pdict = {k.lower():v for k,v in a.items()}
+                if 'iso' in pdict.keys():
+                    iso_flag.append('iso='+pdict['iso'])
+                else:
+                    iso_flag.append('')
+            self.iso_flag = iso_flag
             self.coords=coords
 
         #idnetify all the elements in the structure
@@ -567,6 +583,7 @@ class inputParam:
             all_coords = []
             freeze_flag = []
             fix_info = []
+            kw=""
             for l in inp:
                 if 'Multiplicity =' in l and 'Charge =' in l:
                     read_init = 1
@@ -597,7 +614,7 @@ class inputParam:
                     kw_flag = 2
                 elif '----------' in l and kw_flag == 1:
                     kw_flag = 0
-                if l.startswith(' #') and kw_flag == 2:
+                if l.strip().startswith('#') and kw_flag == 2:
                     kw_flag = 1
                     kw = l[1:].rstrip("\n")
                     continue
@@ -620,6 +637,7 @@ class inputParam:
                     atom = l.split()[1]
                     xyz = l.split()[3:]
                     coords.append('{:<15s}{:>14s}{:>14s}{:>14s}'.format(atom,*xyz))
+
             if all([i in ['0','-1','-2','-3'] for i in freeze_flag]):
                 self.freeze_flag = freeze_flag
             else:
@@ -769,19 +787,6 @@ class inputParam:
                     break
             self.coords=coords
 
-    def _read_xyz(self):
-        coords=[]
-        xyz = open(self.filename,'r')
-        read_flag = 0
-        nol=0
-        for l in xyz:
-            nol+=1
-            if len(l.split()) > 3 and nol > 2:
-                coords.append(l.strip())
-                read_flag = 1
-            if re.match(r'^\d+$',l) and read_flag == 1 :
-                break
-        self.coords=coords
 
     def _read_sdf(self):
         coords=[]
@@ -835,6 +840,14 @@ class writeOut:
             gjf.write(self.param.charge_spin+'\n')
             if coord is None:
                 coord = self.param.coords
+            new_coord = []  
+            if len(self.param.iso_flag) == len(coord):
+                for i,c in enumerate(coord):
+                    if self.param.iso_flag[i]:
+                        new_coord.append(f"{c.split()[0]}({self.param.iso_flag[i]})"+"     "+"  ".join(c.split()[1:]))
+                    else:
+                        new_coord.append(c)
+                coord = new_coord
             if len(self.param.freeze_flag) ==  len(coord) and self.param.args.freeze != "no":
                 for i,c in enumerate(coord):
                     gjf.write(c.split()[0]+'  '+self.param.freeze_flag[i] + '  ' + '  '.join(c.split()[1:])+'\n')

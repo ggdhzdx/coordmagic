@@ -458,6 +458,10 @@ class Structure:
     def save(self, name=None, format=None, frame='all', frame_idx=None, pad0=None, **options):
         StructureWriter().write_st(self, name=name, format=format, frame=frame, frame_idx=frame_idx, pad0=pad0, **options)
 
+    def save_inp(self,program,template_file=''):
+        pass
+        
+
 
     def __str__(self):
         if self.formula == "":

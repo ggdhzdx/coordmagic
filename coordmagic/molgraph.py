@@ -12,6 +12,7 @@ from scipy.spatial import cKDTree
 from .cell import *
 from . import structure
 from .parameter import Parameter
+from .measurement import distance as measure_distance
 from .measurement import angle as measure_angle
 from .measurement import torsion as measure_dihedral
 from .atomorder import snl2r
@@ -221,7 +222,7 @@ class MolGraph:
         if not silent:
             print("\n".join(mol_str))
 
-    def gen_internal_coords(self, measure=False):
+    def gen_internal_coords(self,measure=False):
         '''generate bond angle dihedral for each molecule in self.S.molecules
         therefore self.gen_mol should be run first
         this will generate a dictionary where keys are atom sn and values are measurements
@@ -279,6 +280,36 @@ class MolGraph:
         self.S.angles = {k:v for a in alla for k,v in a.items()}
         self.S.dihedrals = {k:v for d in alld for k,v in d.items()}
         self.S.impropers = {k:v for i in alli for k,v in i.items()}
+
+    def measure_internal_coords(self,coords):
+        """measure internal coords for a list of coords
+        based on the internal coords of the structure
+        """
+        ic_dict = {}
+        bonds = {}
+        angles = {}
+        dihedrals = {}
+        impropers = {}
+        ic_dict_flat = {}
+        for b,v in self.S.bonds.items():
+            bonds[b] = measure_distance(coords[b[0]-1],coords[b[1]-1])
+            ic_dict_flat[f'b{b[0]}-{b[1]}'] = bonds[b]
+        for a,v in self.S.angles.items():
+            angles[a] = measure_angle(*[coords[i-1] for i in a])
+            ic_dict_flat[f'a{a[0]}-{a[1]}-{a[2]}'] = angles[a]
+        for d,v in self.S.dihedrals.items():
+            dihedrals[d] = measure_dihedral(*[coords[i-1] for i in d])
+            ic_dict_flat[f'd{d[0]}-{d[1]}-{d[2]}-{d[3]}'] = dihedrals[d]
+        for i,v in self.S.impropers.items():
+            c1,c2,c3,c4 = [coords[j-1] for j in i]
+            impropers[i] = measure_angle([c1,c2,c3],[c2,c3,c4],mtype='pp')
+            ic_dict_flat[f'i{i[0]}-{i[1]}-{i[2]}-{i[3]}'] = impropers[i]
+        ic_dict['bonds'] = bonds
+        ic_dict['angles'] = angles
+        ic_dict['dihedrals'] = dihedrals
+        ic_dict['impropers'] = impropers
+        return ic_dict,ic_dict_flat
+
 
     def gen_bond_order(self,formula=""):
         '''generate bond_order key:value pair for each bond in self.S.bonds dict 

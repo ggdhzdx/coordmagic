@@ -392,10 +392,10 @@ class StructureReader:
         cs_read = 0
         atoms=[]
         for l in self.file:
-            if re.match('^\s*-?\d\s+\d\s?',l) and cs_read == 0:
+            if re.match(r'^\s*-?\d\s+\d\s?',l) and cs_read == 0:
                 cs_read = 1
                 continue
-            if cs_read == 1 and re.match('^\s*$',l):
+            if cs_read == 1 and re.match(r'^\s*$',l):
                 cs_read = 2
                 continue
             if cs_read == 1:
@@ -508,7 +508,20 @@ class StructureReader:
                 continue
             if read_coord == 2:
                 atom = defaultdict(str)
-                atom['elem'] = x[0]
+                if len(x) == 0:
+                    continue
+                match = re.search(r'([A-Z][a-z]*)\(([^=]+)=([^)]+)\)', x[0])
+                # read atom name and parameters like H(iso=2.0)
+                if match:
+                    element, param1, param2 = match.groups()
+                    atom['elem'] = element
+                    atom[param1] = param2
+                else:
+                    match = re.search(r'([A-Z][a-z]*)', x[0])
+                    if match:
+                        atom['elem'] = match.group()
+                    else:
+                        atom['elem'] = x[0]
                 atom['coord'] = [float(i) for i in x[1:]]
                 atoms.append(atom)
         self.st.atoms = atoms

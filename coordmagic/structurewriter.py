@@ -85,6 +85,7 @@ class StructureWriter:
                 ftypes=[key for key, val in self.ftype2ext.items() if val == ext]
                 if len(ftypes) == 1:
                     format = ftypes[0]
+                    fext = self.ftype2ext[format]
                 else:
                     print("Error!!! file extension {:s} correspond to more than one format {:s}, you must set format explicitly"
                           .format(ext,",".join(ftypes)))
@@ -119,7 +120,7 @@ class StructureWriter:
             self.basename = []
             for i in self.frame_idx:
                 self.basename.append(('{:s}_{:0'+pad0+'d}').format(basename,i))
-        self.filename = [name + '.' + ext for name in self.basename]
+        self.filename = [name + '.' + fext for name in self.basename]
         self.options = defaultdict(str,options)
         if format in self.write_func:
             if len(self.filename) == 1:
@@ -221,6 +222,7 @@ class StructureWriter:
                 line = str1 + str2 + '\n'
                 outf.write(line)
         outf.close()
+
     def _write_gro(self,flnm,frames):
         outf = open(flnm, self.append)
         for n,idx in enumerate(frames):
